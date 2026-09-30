@@ -12,17 +12,17 @@ interface TmdbApi {
 }
 
 data class TmdbResponse(
-    val page: Int,
-    val results: List<TmdbItem>
+    val page: Int = 1,
+    val results: List<TmdbItem> = emptyList()
 )
 
 data class TmdbItem(
-    val id: Int,
-    val title: String?,
-    val name: String?,
-    val poster_path: String?,
-    val backdrop_path: String?,
-    val overview: String?,
-    val vote_average: Double?,
-    val media_type: String?
+    val id: Int = 0,
+    val title: String? = null,
+    val name: String? = null,
+    val poster_path: String? = null,
+    val backdrop_path: String? = null,
+    val overview: String? = null,
+    val vote_average: Double? = null,
+    val media_type: String? = null
 )
