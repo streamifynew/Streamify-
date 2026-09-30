@@ -9,6 +9,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,19 +72,22 @@ private val StreamGold = Color(0xFFFFD58A)
 private val StreamText = Color(0xFFF5F5F5)
 private val StreamMuted = Color(0xFF9A9A9A)
 
-private const val TMDB_IMAGE_BASE_URL =
+private const val TMDB_POSTER_BASE_URL =
     "https://image.tmdb.org/t/p/w500"
 
-@androidx.compose.runtime.Composable
+private const val TMDB_BACKDROP_BASE_URL =
+    "https://image.tmdb.org/t/p/w1280"
+
+@Composable
 fun StreamifyTheme(
-    content: @androidx.compose.runtime.Composable () -> Unit
+    content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        content = content
-    )
+    MaterialTheme {
+        content()
+    }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun StreamifyHome() {
 
     var trending by remember {
@@ -103,7 +108,8 @@ fun StreamifyHome() {
             val repository = TmdbRepository()
             trending = repository.getTrending()
         } catch (exception: Exception) {
-            errorMessage = exception.message ?: "Unable to load TMDB data"
+            errorMessage =
+                exception.message ?: "Unable to load TMDB data."
         } finally {
             isLoading = false
         }
@@ -121,55 +127,77 @@ fun StreamifyHome() {
                 .padding(bottom = 82.dp)
         ) {
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(
+                modifier = Modifier.height(16.dp)
+            )
 
             TopBar()
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(
+                modifier = Modifier.height(18.dp)
+            )
 
             HeroSection(
                 trending = trending
             )
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(
+                modifier = Modifier.height(18.dp)
+            )
 
             CategoryRow()
 
-            Spacer(modifier = Modifier.height(25.dp))
+            Spacer(
+                modifier = Modifier.height(25.dp)
+            )
 
-            if (isLoading) {
+            when {
+                isLoading -> {
 
-                LoadingSection()
+                    LoadingSection()
+                }
 
-            } else if (errorMessage != null) {
+                errorMessage != null -> {
 
-                ErrorSection(
-                    message = errorMessage!!
-                )
+                    ErrorSection(
+                        message = errorMessage!!
+                    )
+                }
 
-            } else {
+                trending.isEmpty() -> {
 
-                if (trending.isNotEmpty()) {
+                    ErrorSection(
+                        message = "No TMDB results available."
+                    )
+                }
+
+                else -> {
 
                     StreamSection(
                         title = "Trending",
                         subtitle = "What's popular right now"
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     TmdbPosterRow(
                         items = trending
                     )
 
-                    Spacer(modifier = Modifier.height(26.dp))
+                    Spacer(
+                        modifier = Modifier.height(26.dp)
+                    )
 
                     StreamSection(
                         title = "Movies",
-                        subtitle = "Discover movies"
+                        subtitle = "Discover movies from TMDB"
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     TmdbPosterRow(
                         items = trending.filter {
@@ -177,14 +205,18 @@ fun StreamifyHome() {
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(26.dp))
+                    Spacer(
+                        modifier = Modifier.height(26.dp)
+                    )
 
                     StreamSection(
                         title = "TV",
-                        subtitle = "Series and shows"
+                        subtitle = "Series and shows from TMDB"
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
 
                     TmdbPosterRow(
                         items = trending.filter {
@@ -192,20 +224,52 @@ fun StreamifyHome() {
                         }
                     )
 
-                } else {
+                    Spacer(
+                        modifier = Modifier.height(26.dp)
+                    )
 
-                    ErrorSection(
-                        message = "No TMDB results available."
+                    StreamSection(
+                        title = "Drama",
+                        subtitle = "Drama discovery"
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    TmdbPosterRow(
+                        items = trending
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(26.dp)
+                    )
+
+                    StreamSection(
+                        title = "Anime",
+                        subtitle = "Anime discovery"
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    TmdbPosterRow(
+                        items = trending
                     )
                 }
             }
         }
 
-        BottomNavigation()
+        BottomNavigation(
+            modifier = Modifier.align(
+                Alignment.BottomCenter
+            )
+        )
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun TopBar() {
 
     Row(
@@ -269,7 +333,7 @@ fun TopBar() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun HeroSection(
     trending: List<TmdbItem>
 ) {
@@ -283,18 +347,19 @@ fun HeroSection(
             .fillMaxWidth()
             .height(225.dp)
             .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(
+                RoundedCornerShape(24.dp)
+            )
             .background(StreamDark)
     ) {
 
-        if (hero?.backdrop_path != null) {
+        if (!hero?.backdrop_path.isNullOrBlank()) {
 
             AsyncImage(
-                model = TMDB_IMAGE_BASE_URL.replace(
-                    "w500",
-                    "w1280"
-                ) + hero.backdrop_path,
-                contentDescription = hero.title ?: hero.name,
+                model = TMDB_BACKDROP_BASE_URL +
+                        hero!!.backdrop_path,
+                contentDescription =
+                    hero.title ?: hero.name,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
@@ -327,7 +392,9 @@ fun HeroSection(
                 letterSpacing = 2.sp
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(
+                modifier = Modifier.height(4.dp)
+            )
 
             Text(
                 text = hero?.title
@@ -335,10 +402,13 @@ fun HeroSection(
                     ?: "Discover something new",
                 color = Color.White,
                 fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                maxLines = 2
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(
+                modifier = Modifier.height(4.dp)
+            )
 
             Text(
                 text = "Powered by TMDB",
@@ -349,7 +419,7 @@ fun HeroSection(
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun CategoryRow() {
 
     val categories = listOf(
@@ -363,7 +433,9 @@ fun CategoryRow() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(
+                rememberScrollState()
+            )
             .padding(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
@@ -399,14 +471,16 @@ fun CategoryRow() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun StreamSection(
     title: String,
     subtitle: String
 ) {
 
     Column(
-        modifier = Modifier.padding(horizontal = 18.dp)
+        modifier = Modifier.padding(
+            horizontal = 18.dp
+        )
     ) {
 
         Text(
@@ -416,7 +490,9 @@ fun StreamSection(
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(3.dp))
+        Spacer(
+            modifier = Modifier.height(3.dp)
+        )
 
         Text(
             text = subtitle,
@@ -426,42 +502,50 @@ fun StreamSection(
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun TmdbPosterRow(
     items: List<TmdbItem>
 ) {
 
-    if (items.isEmpty()) {
+    val posterItems = items
+        .filter {
+            !it.poster_path.isNullOrBlank()
+        }
+        .take(15)
+
+    if (posterItems.isEmpty()) {
 
         Text(
             text = "No titles available.",
             color = StreamMuted,
             fontSize = 12.sp,
-            modifier = Modifier.padding(horizontal = 18.dp)
+            modifier = Modifier.padding(
+                horizontal = 18.dp
+            )
         )
 
         return
     }
 
     LazyRow(
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+        contentPadding = PaddingValues(
             horizontal = 18.dp
         ),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
 
         items(
-            items = items
-                .filter { !it.poster_path.isNullOrBlank() }
-                .take(15)
+            items = posterItems
         ) { item ->
 
-            TmdbPosterCard(item)
+            TmdbPosterCard(
+                item = item
+            )
         }
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun TmdbPosterCard(
     item: TmdbItem
 ) {
@@ -476,21 +560,25 @@ fun TmdbPosterCard(
             modifier = Modifier
                 .width(120.dp)
                 .height(178.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(
+                    RoundedCornerShape(14.dp)
+                )
                 .background(StreamCard)
         ) {
 
             if (!item.poster_path.isNullOrBlank()) {
 
                 AsyncImage(
-                    model = TMDB_IMAGE_BASE_URL + item.poster_path,
-                    contentDescription = item.title ?: item.name,
+                    model = TMDB_POSTER_BASE_URL +
+                            item.poster_path,
+                    contentDescription =
+                        item.title ?: item.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
             }
 
-            if (item.vote_average != null && item.vote_average > 0) {
+            if ((item.vote_average ?: 0.0) > 0.0) {
 
                 Box(
                     modifier = Modifier
@@ -519,10 +607,14 @@ fun TmdbPosterCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(7.dp))
+        Spacer(
+            modifier = Modifier.height(7.dp)
+        )
 
         Text(
-            text = item.title ?: item.name ?: "Untitled",
+            text = item.title
+                ?: item.name
+                ?: "Untitled",
             color = StreamText,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
@@ -531,7 +623,7 @@ fun TmdbPosterCard(
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun LoadingSection() {
 
     Box(
@@ -542,14 +634,17 @@ fun LoadingSection() {
     ) {
 
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment =
+                Alignment.CenterHorizontally
         ) {
 
             CircularProgressIndicator(
                 color = StreamRed
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
 
             Text(
                 text = "Loading TMDB...",
@@ -560,7 +655,7 @@ fun LoadingSection() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun ErrorSection(
     message: String
 ) {
@@ -578,7 +673,8 @@ fun ErrorSection(
     ) {
 
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
             modifier = Modifier.padding(20.dp)
         ) {
 
@@ -589,7 +685,9 @@ fun ErrorSection(
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
 
             Text(
                 text = message,
@@ -600,17 +698,18 @@ fun ErrorSection(
     }
 }
 
-@androidx.compose.runtime.Composable
-fun BottomNavigation() {
+@Composable
+fun BottomNavigation(
+    modifier: Modifier = Modifier
+) {
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(
                 horizontal = 18.dp,
                 vertical = 12.dp
-            )
-            .align(Alignment.BottomCenter),
+            ),
         shape = RoundedCornerShape(24.dp),
         color = Color(0xEE191919)
     ) {
@@ -619,8 +718,10 @@ fun BottomNavigation() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement =
+                Arrangement.SpaceEvenly,
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             BottomItem(
@@ -647,7 +748,7 @@ fun BottomNavigation() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun BottomItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
@@ -655,7 +756,8 @@ fun BottomItem(
 ) {
 
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment =
+            Alignment.CenterHorizontally
     ) {
 
         Icon(
@@ -669,7 +771,9 @@ fun BottomItem(
             modifier = Modifier.size(21.dp)
         )
 
-        Spacer(modifier = Modifier.height(3.dp))
+        Spacer(
+            modifier = Modifier.height(3.dp)
+        )
 
         Text(
             text = label,
