@@ -27,7 +27,9 @@ jobs:
           gradle-version: "8.9"
 
       - name: Build APK
-        run: gradle :app:assembleDebug --stacktrace
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: gradle :app:assembleDebug -PTMDB_API_KEY="$TMDB_API_KEY" --stacktrace
         working-directory: android-app
 
       - name: Upload APK
