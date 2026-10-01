@@ -1,17 +1,15 @@
 package com.streamify.app
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -23,20 +21,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,12 +43,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,10 +60,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 private const val TMDB_IMAGE = "https://image.tmdb.org/t/p/"
 
@@ -108,7 +105,7 @@ private enum class HomeCategory(
     ANIME("Anime")
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun StreamifyApp() {
 
     var screen by remember {
@@ -127,11 +124,11 @@ private fun StreamifyApp() {
         mutableStateOf("")
     }
 
-    val myList = remember {
+    var myList by remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
-    val downloads = remember {
+    var downloads by remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
@@ -150,6 +147,7 @@ private fun StreamifyApp() {
         when (screen) {
 
             StreamifyScreen.HOME -> {
+
                 HomeScreen(
                     selectedCategory = selectedCategory,
                     onCategorySelected = {
@@ -176,6 +174,7 @@ private fun StreamifyApp() {
             }
 
             StreamifyScreen.SEARCH -> {
+
                 SearchScreen(
                     initialQuery = searchQuery,
                     onBack = {
@@ -189,11 +188,12 @@ private fun StreamifyApp() {
             }
 
             StreamifyScreen.DETAIL -> {
+
                 selectedItem?.let { item ->
 
                     DetailScreen(
                         item = item,
-                        isInList = myList.value.any {
+                        isInList = myList.any {
                             it.id == item.id &&
                                     it.media_type == item.media_type
                         },
@@ -202,31 +202,30 @@ private fun StreamifyApp() {
                         },
                         onToggleList = {
 
-                            val exists = myList.value.any {
+                            val exists = myList.any {
                                 it.id == item.id &&
                                         it.media_type == item.media_type
                             }
 
-                            myList.value =
+                            myList =
                                 if (exists) {
-                                    myList.value.filterNot {
+                                    myList.filterNot {
                                         it.id == item.id &&
                                                 it.media_type == item.media_type
                                     }
                                 } else {
-                                    myList.value + item
+                                    myList + item
                                 }
                         },
                         onDownload = {
 
                             if (
-                                downloads.value.none {
+                                downloads.none {
                                     it.id == item.id &&
                                             it.media_type == item.media_type
                                 }
                             ) {
-                                downloads.value =
-                                    downloads.value + item
+                                downloads = downloads + item
                             }
                         },
                         onSimilarClick = {
@@ -240,7 +239,7 @@ private fun StreamifyApp() {
 
                 SimpleCollectionScreen(
                     title = "My List",
-                    items = myList.value,
+                    items = myList,
                     emptyText = "Your watchlist is empty.",
                     onBack = {
                         screen = StreamifyScreen.HOME
@@ -256,7 +255,7 @@ private fun StreamifyApp() {
 
                 SimpleCollectionScreen(
                     title = "Downloads",
-                    items = downloads.value,
+                    items = downloads,
                     emptyText = "No downloads yet.",
                     onBack = {
                         screen = StreamifyScreen.HOME
@@ -285,7 +284,7 @@ private fun StreamifyApp() {
 // HOME
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun HomeScreen(
     selectedCategory: HomeCategory,
     onCategorySelected: (HomeCategory) -> Unit,
@@ -315,10 +314,6 @@ private fun HomeScreen(
     var heroIndex by remember {
         mutableIntStateOf(0)
     }
-
-    // --------------------------------------------------------
-    // LOAD CATEGORY
-    // --------------------------------------------------------
 
     LaunchedEffect(selectedCategory) {
 
@@ -356,10 +351,6 @@ private fun HomeScreen(
         }
     }
 
-    // --------------------------------------------------------
-    // HERO AUTO ROTATION
-    // --------------------------------------------------------
-
     LaunchedEffect(items) {
 
         while (items.size > 1) {
@@ -380,21 +371,11 @@ private fun HomeScreen(
             .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState())
-        ) {
-
-            // This outer horizontal scroll is intentionally
-            // replaced below by a vertical content container.
-        }
-
-        androidx.compose.foundation.lazy.LazyColumn(
+        LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            contentPadding = PaddingValues(
                 bottom = 110.dp
             )
         ) {
@@ -420,7 +401,7 @@ private fun HomeScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(360.dp),
+                            .height(330.dp),
                         contentAlignment = Alignment.Center
                     ) {
 
@@ -437,7 +418,7 @@ private fun HomeScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(360.dp),
+                            .height(330.dp),
                         contentAlignment = Alignment.Center
                     ) {
 
@@ -451,11 +432,8 @@ private fun HomeScreen(
 
                 } else {
 
-                    val heroItems =
-                        items.take(5)
-
                     HeroCarousel(
-                        items = heroItems,
+                        items = items.take(5),
                         selectedIndex = heroIndex,
                         onItemClick = onItemClick
                     )
@@ -477,16 +455,13 @@ private fun HomeScreen(
                 )
             }
 
-            item {
-
-                Spacer(
-                    modifier = Modifier.height(26.dp)
-                )
-            }
-
             if (!isLoading && items.isNotEmpty()) {
 
                 item {
+
+                    Spacer(
+                        modifier = Modifier.height(28.dp)
+                    )
 
                     SectionHeader(
                         title = selectedCategory.title,
@@ -502,7 +477,7 @@ private fun HomeScreen(
                                 "Popular TV shows"
 
                             HomeCategory.DRAMA ->
-                                "Drama collection"
+                                "Popular drama"
 
                             HomeCategory.ANIME ->
                                 "Animation & anime"
@@ -515,9 +490,6 @@ private fun HomeScreen(
                     Spacer(
                         modifier = Modifier.height(14.dp)
                     )
-                }
-
-                item {
 
                     ContentRow(
                         items = items,
@@ -528,100 +500,28 @@ private fun HomeScreen(
                 item {
 
                     Spacer(
-                        modifier = Modifier.height(28.dp)
+                        modifier = Modifier.height(30.dp)
                     )
                 }
 
-                if (selectedCategory == HomeCategory.MOVIES) {
+                item {
 
-                    item {
-
-                        SectionHeader(
-                            title = "More Movies",
-                            subtitle = "Discover more titles"
-                        )
-                    }
-
-                    item {
-
-                        Spacer(
-                            modifier = Modifier.height(14.dp)
-                        )
-
-                        ContentRow(
-                            items = items.drop(5),
-                            onItemClick = onItemClick
-                        )
-                    }
+                    SectionHeader(
+                        title = "More ${selectedCategory.title}",
+                        subtitle = "Discover more titles"
+                    )
                 }
 
-                if (selectedCategory == HomeCategory.TV) {
+                item {
 
-                    item {
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
 
-                        SectionHeader(
-                            title = "More TV",
-                            subtitle = "Discover more shows"
-                        )
-                    }
-
-                    item {
-
-                        Spacer(
-                            modifier = Modifier.height(14.dp)
-                        )
-
-                        ContentRow(
-                            items = items.drop(5),
-                            onItemClick = onItemClick
-                        )
-                    }
-                }
-
-                if (selectedCategory == HomeCategory.DRAMA) {
-
-                    item {
-
-                        SectionHeader(
-                            title = "Drama Picks",
-                            subtitle = "Popular drama titles"
-                        )
-                    }
-
-                    item {
-
-                        Spacer(
-                            modifier = Modifier.height(14.dp)
-                        )
-
-                        ContentRow(
-                            items = items.drop(5),
-                            onItemClick = onItemClick
-                        )
-                    }
-                }
-
-                if (selectedCategory == HomeCategory.ANIME) {
-
-                    item {
-
-                        SectionHeader(
-                            title = "Animation Picks",
-                            subtitle = "Popular animated titles"
-                        )
-                    }
-
-                    item {
-
-                        Spacer(
-                            modifier = Modifier.height(14.dp)
-                        )
-
-                        ContentRow(
-                            items = items.drop(5),
-                            onItemClick = onItemClick
-                        )
-                    }
+                    ContentRow(
+                        items = items.drop(5),
+                        onItemClick = onItemClick
+                    )
                 }
             }
         }
@@ -641,7 +541,7 @@ private fun HomeScreen(
 // TOP BAR
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun HomeTopBar(
     onSearch: () -> Unit
 ) {
@@ -650,29 +550,27 @@ private fun HomeTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = 22.dp,
-                end = 22.dp,
+                start = 20.dp,
+                end = 20.dp,
                 top = 18.dp
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
 
-        // Streamify popcorn-style brand mark
         Box(
-    modifier = Modifier
-        .size(48.dp)
-        .clip(RoundedCornerShape(14.dp))
-        .background(Color.Transparent),
-    contentAlignment = Alignment.Center
-) {
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
 
-    androidx.compose.foundation.Image(
-        painter = androidx.compose.ui.res.painterResource(
-            id = com.streamify.app.R.drawable.streamify_logo
-        ),
-        contentDescription = "Streamify",
-        modifier = Modifier.fillMaxSize()
-    )
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(
+                    id = com.streamify.app.R.drawable.streamify_logo
+                ),
+                contentDescription = "Streamify",
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         Spacer(
@@ -730,14 +628,16 @@ private fun HomeTopBar(
 // HERO
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun HeroCarousel(
     items: List<TmdbItem>,
     selectedIndex: Int,
     onItemClick: (TmdbItem) -> Unit
 ) {
 
-    if (items.isEmpty()) return
+    if (items.isEmpty()) {
+        return
+    }
 
     val safeIndex =
         selectedIndex.coerceIn(
@@ -755,9 +655,9 @@ private fun HeroCarousel(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(365.dp)
-            .padding(horizontal = 22.dp)
-            .clip(RoundedCornerShape(30.dp))
+            .height(390.dp)
+            .padding(horizontal = 14.dp)
+            .clip(RoundedCornerShape(24.dp))
             .clickable {
                 onItemClick(item)
             }
@@ -784,8 +684,8 @@ private fun HeroCarousel(
                     Brush.verticalGradient(
                         listOf(
                             Color.Transparent,
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.92f)
+                            Color.Black.copy(alpha = 0.25f),
+                            StreamifyBlack.copy(alpha = 0.98f)
                         )
                     )
                 )
@@ -794,15 +694,16 @@ private fun HeroCarousel(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(26.dp)
+                .padding(22.dp)
         ) {
 
             Text(
-                text = "TRENDING",
-                color = StreamifyGold,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
+                text = title,
+                color = Color.White,
+                fontSize = 27.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(
@@ -810,57 +711,28 @@ private fun HeroCarousel(
             )
 
             Text(
-                text = title,
-                color = Color.White,
-                fontSize = 31.sp,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(
-                modifier = Modifier.height(6.dp)
-            )
-
-            Text(
-                text = "Powered by TMDB",
-                color = Color.White.copy(alpha = 0.75f),
+                text =
+                    "⭐ ${
+                        String.format(
+                            "%.1f",
+                            item.vote_average ?: 0.0
+                        )
+                    }",
+                color = StreamifyGold,
                 fontSize = 14.sp
             )
 
             Spacer(
-                modifier = Modifier.height(12.dp)
+                modifier = Modifier.height(10.dp)
             )
 
-            Row {
-
-                repeat(
-                    minOf(items.size, 5)
-                ) { index ->
-
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 5.dp)
-                            .size(
-                                width =
-                                    if (index == safeIndex)
-                                        22.dp
-                                    else
-                                        7.dp,
-                                height = 7.dp
-                            )
-                            .clip(CircleShape)
-                            .background(
-                                if (index == safeIndex)
-                                    StreamifyRed
-                                else
-                                    Color.White.copy(
-                                        alpha = 0.45f
-                                    )
-                            )
-                    )
-                }
-            }
+            Text(
+                text = item.overview ?: "",
+                color = StreamifyWhite,
+                fontSize = 13.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -870,30 +742,42 @@ private fun HeroCarousel(
 // CATEGORY PILLS
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun CategoryPills(
     selectedCategory: HomeCategory,
     onCategorySelected: (HomeCategory) -> Unit
 ) {
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(
-                rememberScrollState()
-            )
-            .padding(horizontal = 22.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    LazyRow(
+        contentPadding = PaddingValues(
+            horizontal = 20.dp
+        ),
+        horizontalArrangement =
+            Arrangement.spacedBy(10.dp)
     ) {
 
-        HomeCategory.values().forEach { category ->
+        items(HomeCategory.values().toList()) { category ->
 
             val selected =
-                selectedCategory == category
+                category == selectedCategory
 
-            Box(
+            Text(
+                text = category.title,
+                color =
+                    if (selected)
+                        Color.White
+                    else
+                        StreamifyGrey,
+                fontSize = 14.sp,
+                fontWeight =
+                    if (selected)
+                        FontWeight.Bold
+                    else
+                        FontWeight.Normal,
                 modifier = Modifier
-                    .clip(CircleShape)
+                    .clip(
+                        RoundedCornerShape(50.dp)
+                    )
                     .background(
                         if (selected)
                             StreamifyRed
@@ -904,34 +788,10 @@ private fun CategoryPills(
                         onCategorySelected(category)
                     }
                     .padding(
-                        horizontal = 20.dp,
-                        vertical = 13.dp
+                        horizontal = 18.dp,
+                        vertical = 10.dp
                     )
-            ) {
-
-                Text(
-                    text = when (category) {
-
-                        HomeCategory.TRENDING ->
-                            "🔥 Trending"
-
-                        HomeCategory.MOVIES ->
-                            "🎬 Movies"
-
-                        HomeCategory.TV ->
-                            "📺 TV"
-
-                        HomeCategory.DRAMA ->
-                            "🎭 Drama"
-
-                        HomeCategory.ANIME ->
-                            "🎨 Anime"
-                    },
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+            )
         }
     }
 }
@@ -941,31 +801,33 @@ private fun CategoryPills(
 // SECTION HEADER
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SectionHeader(
     title: String,
     subtitle: String
 ) {
 
     Column(
-        modifier = Modifier.padding(horizontal = 22.dp)
+        modifier = Modifier.padding(
+            horizontal = 20.dp
+        )
     ) {
 
         Text(
             text = title,
             color = Color.White,
-            fontSize = 27.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold
         )
 
         Spacer(
-            modifier = Modifier.height(5.dp)
+            modifier = Modifier.height(3.dp)
         )
 
         Text(
             text = subtitle,
             color = StreamifyGrey,
-            fontSize = 14.sp
+            fontSize = 12.sp
         )
     }
 }
@@ -975,23 +837,21 @@ private fun SectionHeader(
 // CONTENT ROW
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun ContentRow(
     items: List<TmdbItem>,
     onItemClick: (TmdbItem) -> Unit
 ) {
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(
-                rememberScrollState()
-            )
-            .padding(horizontal = 22.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    LazyRow(
+        contentPadding = PaddingValues(
+            horizontal = 20.dp
+        ),
+        horizontalArrangement =
+            Arrangement.spacedBy(12.dp)
     ) {
 
-        items.take(15).forEach { item ->
+        items(items) { item ->
 
             ContentCard(
                 item = item,
@@ -1008,7 +868,7 @@ private fun ContentRow(
 // CONTENT CARD
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun ContentCard(
     item: TmdbItem,
     onClick: () -> Unit
@@ -1021,7 +881,7 @@ private fun ContentCard(
 
     Column(
         modifier = Modifier
-            .width(160.dp)
+            .width(145.dp)
             .clickable {
                 onClick()
             }
@@ -1030,8 +890,8 @@ private fun ContentCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(235.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .height(210.dp)
+                .clip(RoundedCornerShape(16.dp))
                 .background(StreamifyCard)
         ) {
 
@@ -1052,14 +912,18 @@ private fun ContentCard(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(9.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .padding(8.dp)
+                    .clip(
+                        RoundedCornerShape(8.dp)
+                    )
                     .background(
-                        Color.Black.copy(alpha = 0.75f)
+                        Color.Black.copy(
+                            alpha = 0.75f
+                        )
                     )
                     .padding(
-                        horizontal = 9.dp,
-                        vertical = 7.dp
+                        horizontal = 7.dp,
+                        vertical = 4.dp
                     )
             ) {
 
@@ -1070,21 +934,22 @@ private fun ContentCard(
                             item.vote_average ?: 0.0
                         ),
                     color = StreamifyGold,
-                    fontSize = 13.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
 
         Spacer(
-            modifier = Modifier.height(9.dp)
+            modifier = Modifier.height(8.dp)
         )
 
         Text(
             text = title,
             color = Color.White,
-            fontSize = 16.sp,
-            maxLines = 1,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -1095,7 +960,7 @@ private fun ContentCard(
 // SEARCH
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SearchScreen(
     initialQuery: String,
     onBack: () -> Unit,
@@ -1118,20 +983,23 @@ private fun SearchScreen(
         mutableStateOf(false)
     }
 
-    val scope = rememberCoroutineScope()
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(StreamifyBlack)
-            .padding(horizontal = 20.dp)
+            .padding(
+                horizontal = 16.dp
+            )
     ) {
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(
+                    top = 16.dp
+                ),
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             IconButton(
@@ -1139,7 +1007,8 @@ private fun SearchScreen(
             ) {
 
                 Icon(
-                    imageVector = Icons.Outlined.ArrowBack,
+                    imageVector =
+                        Icons.Outlined.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -1155,48 +1024,59 @@ private fun SearchScreen(
                     .height(58.dp),
                 placeholder = {
                     Text(
-                        "Search movies & shows",
+                        text = "Search movies & shows",
                         color = StreamifyGrey
                     )
                 },
                 singleLine = true,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = StreamifyCard,
-                    unfocusedContainerColor = StreamifyCard,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    focusedContainerColor =
+                        StreamifyCard,
+                    unfocusedContainerColor =
+                        StreamifyCard,
+                    focusedTextColor =
+                        Color.White,
+                    unfocusedTextColor =
+                        Color.White,
+                    focusedIndicatorColor =
+                        Color.Transparent,
+                    unfocusedIndicatorColor =
+                        Color.Transparent
                 ),
-                shape = RoundedCornerShape(18.dp)
+                shape =
+                    RoundedCornerShape(18.dp)
             )
 
             IconButton(
                 onClick = {
 
-                    scope.launch {
+                    if (query.isBlank()) {
+                        return@IconButton
+                    }
 
-                        if (query.isNotBlank()) {
+                    loading = true
 
-                            loading = true
+                    kotlinx.coroutines.CoroutineScope(
+                        kotlinx.coroutines.Dispatchers.Main
+                    ).launch {
 
-                            results =
-                                try {
-                                    repository.search(query)
-                                } catch (
-                                    _: Exception
-                                ) {
-                                    emptyList()
-                                }
+                        results =
+                            try {
+                                repository.search(
+                                    query.trim()
+                                )
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
 
-                            loading = false
-                        }
+                        loading = false
                     }
                 }
             ) {
 
                 Icon(
-                    imageVector = Icons.Outlined.Search,
+                    imageVector =
+                        Icons.Outlined.Search,
                     contentDescription = "Search",
                     tint = StreamifyRed
                 )
@@ -1204,7 +1084,7 @@ private fun SearchScreen(
         }
 
         Spacer(
-            modifier = Modifier.height(20.dp)
+            modifier = Modifier.height(18.dp)
         )
 
         if (loading) {
@@ -1219,21 +1099,32 @@ private fun SearchScreen(
                 )
             }
 
+        } else if (results.isEmpty()) {
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+
+                Text(
+                    text = "Search for a movie or TV show.",
+                    color = StreamifyGrey
+                )
+            }
+
         } else {
 
-            androidx.compose.foundation.lazy.LazyColumn(
+            LazyColumn(
                 verticalArrangement =
                     Arrangement.spacedBy(12.dp)
             ) {
 
-                items(
-                    count = results.size
-                ) { index ->
+                items(results) { item ->
 
                     SearchResultCard(
-                        item = results[index],
+                        item = item,
                         onClick = {
-                            onItemClick(results[index])
+                            onItemClick(item)
                         }
                     )
                 }
@@ -1247,7 +1138,7 @@ private fun SearchScreen(
 // SEARCH RESULT
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SearchResultCard(
     item: TmdbItem,
     onClick: () -> Unit
@@ -1284,7 +1175,9 @@ private fun SearchResultCard(
                     width = 70.dp,
                     height = 100.dp
                 )
-                .clip(RoundedCornerShape(12.dp)),
+                .clip(
+                    RoundedCornerShape(12.dp)
+                ),
             contentScale = ContentScale.Crop
         )
 
@@ -1304,7 +1197,7 @@ private fun SearchResultCard(
             )
 
             Spacer(
-                modifier = Modifier.height(7.dp)
+                modifier = Modifier.height(6.dp)
             )
 
             Text(
@@ -1318,7 +1211,7 @@ private fun SearchResultCard(
             )
 
             Spacer(
-                modifier = Modifier.height(7.dp)
+                modifier = Modifier.height(6.dp)
             )
 
             Text(
@@ -1328,7 +1221,8 @@ private fun SearchResultCard(
                 color = StreamifyGrey,
                 fontSize = 13.sp,
                 maxLines = 3,
-                overflow = TextOverflow.Ellipsis
+                overflow =
+                    TextOverflow.Ellipsis
             )
         }
     }
@@ -1339,7 +1233,7 @@ private fun SearchResultCard(
 // DETAIL
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun DetailScreen(
     item: TmdbItem,
     isInList: Boolean,
@@ -1361,7 +1255,10 @@ private fun DetailScreen(
         mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
-    LaunchedEffect(item.id, item.media_type) {
+    LaunchedEffect(
+        item.id,
+        item.media_type
+    ) {
 
         try {
 
@@ -1372,7 +1269,7 @@ private fun DetailScreen(
                 repository.getSimilar(item)
 
         } catch (_: Exception) {
-            // Keep original item if detail request fails.
+            // Keep original TMDB item.
         }
     }
 
@@ -1381,11 +1278,11 @@ private fun DetailScreen(
             ?: details.name
             ?: "Untitled"
 
-    androidx.compose.foundation.lazy.LazyColumn(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(StreamifyBlack),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+        contentPadding = PaddingValues(
             bottom = 40.dp
         )
     ) {
@@ -1418,7 +1315,9 @@ private fun DetailScreen(
                         .background(
                             Brush.verticalGradient(
                                 listOf(
-                                    Color.Black.copy(alpha = 0.2f),
+                                    Color.Black.copy(
+                                        alpha = 0.10f
+                                    ),
                                     StreamifyBlack
                                 )
                             )
@@ -1427,7 +1326,9 @@ private fun DetailScreen(
 
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.padding(12.dp)
+                    modifier = Modifier.padding(
+                        10.dp
+                    )
                 ) {
 
                     Icon(
@@ -1443,8 +1344,9 @@ private fun DetailScreen(
         item {
 
             Column(
-                modifier = Modifier
-                    .padding(horizontal = 22.dp)
+                modifier = Modifier.padding(
+                    horizontal = 20.dp
+                )
             ) {
 
                 Text(
@@ -1455,7 +1357,7 @@ private fun DetailScreen(
                 )
 
                 Spacer(
-                    modifier = Modifier.height(10.dp)
+                    modifier = Modifier.height(8.dp)
                 )
 
                 Text(
@@ -1476,17 +1378,18 @@ private fun DetailScreen(
 
                 Row(
                     horizontalArrangement =
-                        Arrangement.spacedBy(10.dp)
+                        Arrangement.spacedBy(8.dp)
                 ) {
 
                     DetailButton(
-                        icon = Icons.Outlined.PlayArrow,
+                        icon =
+                            Icons.Outlined.PlayArrow,
                         text = "Play",
+                        primary = true,
                         onClick = {
-                            // Playback source intentionally
-                            // remains unconnected.
-                        },
-                        primary = true
+                            // Playback source slot.
+                            // Will be connected later.
+                        }
                     )
 
                     DetailButton(
@@ -1500,18 +1403,21 @@ private fun DetailScreen(
                                 "Added"
                             else
                                 "My List",
-                        onClick = onToggleList
+                        onClick =
+                            onToggleList
                     )
 
                     DetailButton(
-                        icon = Icons.Outlined.Download,
+                        icon =
+                            Icons.Outlined.Download,
                         text = "Download",
-                        onClick = onDownload
+                        onClick =
+                            onDownload
                     )
                 }
 
                 Spacer(
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.height(26.dp)
                 )
 
                 Text(
@@ -1541,7 +1447,7 @@ private fun DetailScreen(
             item {
 
                 Spacer(
-                    modifier = Modifier.height(28.dp)
+                    modifier = Modifier.height(30.dp)
                 )
 
                 SectionHeader(
@@ -1555,7 +1461,8 @@ private fun DetailScreen(
 
                 ContentRow(
                     items = similar,
-                    onItemClick = onSimilarClick
+                    onItemClick =
+                        onSimilarClick
                 )
             }
         }
@@ -1567,7 +1474,7 @@ private fun DetailScreen(
 // DETAIL BUTTON
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun DetailButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
@@ -1577,7 +1484,9 @@ private fun DetailButton(
 
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(
+                RoundedCornerShape(14.dp)
+            )
             .background(
                 if (primary)
                     StreamifyRed
@@ -1588,10 +1497,11 @@ private fun DetailButton(
                 onClick()
             }
             .padding(
-                horizontal = 13.dp,
+                horizontal = 12.dp,
                 vertical = 11.dp
             ),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment =
+            Alignment.CenterVertically
     ) {
 
         Icon(
@@ -1602,7 +1512,7 @@ private fun DetailButton(
         )
 
         Spacer(
-            modifier = Modifier.width(6.dp)
+            modifier = Modifier.width(5.dp)
         )
 
         Text(
@@ -1619,7 +1529,7 @@ private fun DetailButton(
 // COLLECTION
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SimpleCollectionScreen(
     title: String,
     items: List<TmdbItem>,
@@ -1638,7 +1548,8 @@ private fun SimpleCollectionScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             IconButton(
@@ -1646,7 +1557,8 @@ private fun SimpleCollectionScreen(
             ) {
 
                 Icon(
-                    imageVector = Icons.Outlined.ArrowBack,
+                    imageVector =
+                        Icons.Outlined.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -1664,7 +1576,8 @@ private fun SimpleCollectionScreen(
 
             Box(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment =
+                    Alignment.Center
             ) {
 
                 Text(
@@ -1675,19 +1588,23 @@ private fun SimpleCollectionScreen(
 
         } else {
 
-            androidx.compose.foundation.lazy.LazyColumn {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    horizontal = 12.dp,
+                    bottom = 30.dp
+                ),
+                verticalArrangement =
+                    Arrangement.spacedBy(10.dp)
+            ) {
 
-                items(items.size) { index ->
+                items(items) { item ->
 
                     SearchResultCard(
-                        item = items[index],
+                        item = item,
                         onClick = {
-                            onItemClick(items[index])
+                            onItemClick(item)
                         }
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(10.dp)
                     )
                 }
             }
@@ -1700,7 +1617,7 @@ private fun SimpleCollectionScreen(
 // SETTINGS
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SettingsScreen(
     onBack: () -> Unit
 ) {
@@ -1715,7 +1632,8 @@ private fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             IconButton(
@@ -1723,7 +1641,8 @@ private fun SettingsScreen(
             ) {
 
                 Icon(
-                    imageVector = Icons.Outlined.ArrowBack,
+                    imageVector =
+                        Icons.Outlined.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -1760,7 +1679,7 @@ private fun SettingsScreen(
 }
 
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SettingsRow(
     title: String,
     subtitle: String
@@ -1797,10 +1716,10 @@ private fun SettingsRow(
 
 
 // ============================================================
-// BOTTOM NAV
+// BOTTOM NAVIGATION
 // ============================================================
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun BottomNavigationBar(
     selected: StreamifyScreen,
     onHome: () -> Unit,
@@ -1813,17 +1732,24 @@ private fun BottomNavigationBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                horizontal = 22.dp,
-                vertical = 12.dp
+                horizontal = 20.dp,
+                vertical = 10.dp
             )
-            .clip(RoundedCornerShape(32.dp))
-            .background(StreamifyCard)
+            .clip(
+                RoundedCornerShape(32.dp)
+            )
+            .background(
+                StreamifyCard.copy(
+                    alpha = 0.96f
+                )
+            )
             .padding(
-                vertical = 13.dp
+                vertical = 12.dp
             ),
         horizontalArrangement =
             Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment =
+            Alignment.CenterVertically
     ) {
 
         BottomNavItem(
@@ -1861,7 +1787,7 @@ private fun BottomNavigationBar(
 }
 
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun BottomNavItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
@@ -1875,9 +1801,10 @@ private fun BottomNavItem(
                 onClick()
             }
             .padding(
-                horizontal = 10.dp
+                horizontal = 9.dp
             ),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment =
+            Alignment.CenterHorizontally
     ) {
 
         Icon(
@@ -1888,7 +1815,7 @@ private fun BottomNavItem(
                     StreamifyRed
                 else
                     StreamifyGrey,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier.size(25.dp)
         )
 
         Spacer(
