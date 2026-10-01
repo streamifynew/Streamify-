@@ -55,7 +55,8 @@ dependencies {
 
     // Material icons used by Streamify UI
     implementation(
-        "androidx.compose.material:material-icons-core"
+    "androidx.compose.material:material-icons-extended"
+
     )
 
     // TMDB networking
