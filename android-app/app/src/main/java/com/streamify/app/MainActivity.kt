@@ -1,5 +1,7 @@
 package com.streamify.app
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -10,47 +12,44 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,27 +58,38 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-private val StreamBlack = Color(0xFF080808)
-private val StreamDark = Color(0xFF101010)
-private val StreamCard = Color(0xFF191919)
-private val StreamRed = Color(0xFFFF3B22)
-private val StreamOrange = Color(0xFFFF7A00)
-private val StreamGold = Color(0xFFFFD58A)
-private val StreamText = Color(0xFFF5F5F5)
-private val StreamMuted = Color(0xFF999999)
+private const val TMDB_IMAGE = "https://image.tmdb.org/t/p/"
 
-private const val POSTER_URL =
-    "https://image.tmdb.org/t/p/w500"
+private val StreamifyBlack = Color(0xFF080808)
+private val StreamifyCard = Color(0xFF171717)
+private val StreamifyRed = Color(0xFFFF3B30)
+private val StreamifyOrange = Color(0xFFFF6A00)
+private val StreamifyGold = Color(0xFFFFD166)
+private val StreamifyWhite = Color(0xFFF7F7F7)
+private val StreamifyGrey = Color(0xFF9A9A9A)
 
-private const val BACKDROP_URL =
-    "https://image.tmdb.org/t/p/w1280"
+class MainActivity : ComponentActivity() {
 
-private enum class Screen {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setContent {
+            MaterialTheme {
+                StreamifyApp()
+            }
+        }
+    }
+}
+
+private enum class StreamifyScreen {
     HOME,
     SEARCH,
     DETAIL,
@@ -88,180 +98,181 @@ private enum class Screen {
     SETTINGS
 }
 
-class MainActivity : ComponentActivity() {
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        setContent {
-            StreamifyTheme {
-                StreamifyApp()
-            }
-        }
-    }
-}
-
-@Composable
-fun StreamifyTheme(
-    content: @Composable () -> Unit
+private enum class HomeCategory(
+    val title: String
 ) {
-    MaterialTheme {
-        content()
-    }
+    TRENDING("Trending"),
+    MOVIES("Movies"),
+    TV("TV"),
+    DRAMA("Drama"),
+    ANIME("Anime")
 }
 
-@Composable
-fun StreamifyApp() {
+@androidx.compose.runtime.Composable
+private fun StreamifyApp() {
 
     var screen by remember {
-        mutableStateOf(Screen.HOME)
+        mutableStateOf(StreamifyScreen.HOME)
+    }
+
+    var selectedCategory by remember {
+        mutableStateOf(HomeCategory.TRENDING)
     }
 
     var selectedItem by remember {
         mutableStateOf<TmdbItem?>(null)
     }
 
-    var myList by remember {
+    var searchQuery by remember {
+        mutableStateOf("")
+    }
+
+    val myList = remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
-    var downloads by remember {
+    val downloads = remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
-    }
-
-    fun openDetails(item: TmdbItem) {
-        selectedItem = item
-        screen = Screen.DETAIL
     }
 
     BackHandler(
-        enabled = screen != Screen.HOME
+        enabled = screen != StreamifyScreen.HOME
     ) {
-        screen = Screen.HOME
-        selectedItem = null
+        screen = StreamifyScreen.HOME
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(StreamBlack)
+            .background(StreamifyBlack)
     ) {
 
         when (screen) {
 
-            Screen.HOME -> {
+            StreamifyScreen.HOME -> {
                 HomeScreen(
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = {
+                        selectedCategory = it
+                    },
                     onSearch = {
-                        screen = Screen.SEARCH
+                        searchQuery = ""
+                        screen = StreamifyScreen.SEARCH
                     },
-                    onProfile = {
-                        screen = Screen.SETTINGS
+                    onItemClick = {
+                        selectedItem = it
+                        screen = StreamifyScreen.DETAIL
                     },
-                    onItemClick = ::openDetails,
                     onMyList = {
-                        screen = Screen.MY_LIST
+                        screen = StreamifyScreen.MY_LIST
                     },
                     onDownloads = {
-                        screen = Screen.DOWNLOADS
+                        screen = StreamifyScreen.DOWNLOADS
                     },
                     onSettings = {
-                        screen = Screen.SETTINGS
+                        screen = StreamifyScreen.SETTINGS
                     }
                 )
             }
 
-            Screen.SEARCH -> {
+            StreamifyScreen.SEARCH -> {
                 SearchScreen(
+                    initialQuery = searchQuery,
                     onBack = {
-                        screen = Screen.HOME
+                        screen = StreamifyScreen.HOME
                     },
-                    onItemClick = ::openDetails
+                    onItemClick = {
+                        selectedItem = it
+                        screen = StreamifyScreen.DETAIL
+                    }
                 )
             }
 
-            Screen.DETAIL -> {
-
+            StreamifyScreen.DETAIL -> {
                 selectedItem?.let { item ->
 
                     DetailScreen(
                         item = item,
-                        isInMyList = myList.any {
+                        isInList = myList.value.any {
                             it.id == item.id &&
-                            it.media_type == item.media_type
+                                    it.media_type == item.media_type
                         },
                         onBack = {
-                            screen = Screen.HOME
-                            selectedItem = null
+                            screen = StreamifyScreen.HOME
                         },
-                        onAddToList = {
+                        onToggleList = {
 
-                            val exists = myList.any {
+                            val exists = myList.value.any {
                                 it.id == item.id &&
-                                it.media_type == item.media_type
+                                        it.media_type == item.media_type
                             }
 
-                            myList =
+                            myList.value =
                                 if (exists) {
-                                    myList.filterNot {
+                                    myList.value.filterNot {
                                         it.id == item.id &&
-                                        it.media_type == item.media_type
+                                                it.media_type == item.media_type
                                     }
                                 } else {
-                                    myList + item
+                                    myList.value + item
                                 }
                         },
                         onDownload = {
 
                             if (
-                                downloads.none {
+                                downloads.value.none {
                                     it.id == item.id &&
-                                    it.media_type == item.media_type
+                                            it.media_type == item.media_type
                                 }
                             ) {
-                                downloads =
-                                    downloads + item
+                                downloads.value =
+                                    downloads.value + item
                             }
-
-                            screen = Screen.DOWNLOADS
                         },
-                        onSimilarClick = ::openDetails
+                        onSimilarClick = {
+                            selectedItem = it
+                        }
                     )
                 }
             }
 
-            Screen.MY_LIST -> {
+            StreamifyScreen.MY_LIST -> {
 
-                CollectionScreen(
+                SimpleCollectionScreen(
                     title = "My List",
-                    items = myList,
-                    emptyText =
-                        "Your saved movies and shows will appear here.",
+                    items = myList.value,
+                    emptyText = "Your watchlist is empty.",
                     onBack = {
-                        screen = Screen.HOME
+                        screen = StreamifyScreen.HOME
                     },
-                    onItemClick = ::openDetails
+                    onItemClick = {
+                        selectedItem = it
+                        screen = StreamifyScreen.DETAIL
+                    }
                 )
             }
 
-            Screen.DOWNLOADS -> {
+            StreamifyScreen.DOWNLOADS -> {
 
-                CollectionScreen(
+                SimpleCollectionScreen(
                     title = "Downloads",
-                    items = downloads,
-                    emptyText =
-                        "Your downloaded content will appear here.",
+                    items = downloads.value,
+                    emptyText = "No downloads yet.",
                     onBack = {
-                        screen = Screen.HOME
+                        screen = StreamifyScreen.HOME
                     },
-                    onItemClick = ::openDetails
+                    onItemClick = {
+                        selectedItem = it
+                        screen = StreamifyScreen.DETAIL
+                    }
                 )
             }
 
-            Screen.SETTINGS -> {
+            StreamifyScreen.SETTINGS -> {
 
                 SettingsScreen(
                     onBack = {
-                        screen = Screen.HOME
+                        screen = StreamifyScreen.HOME
                     }
                 )
             }
@@ -269,21 +280,31 @@ fun StreamifyApp() {
     }
 }
 
-@Composable
-fun HomeScreen(
+
+// ============================================================
+// HOME
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun HomeScreen(
+    selectedCategory: HomeCategory,
+    onCategorySelected: (HomeCategory) -> Unit,
     onSearch: () -> Unit,
-    onProfile: () -> Unit,
     onItemClick: (TmdbItem) -> Unit,
     onMyList: () -> Unit,
     onDownloads: () -> Unit,
     onSettings: () -> Unit
 ) {
 
-    var trending by remember {
+    val repository = remember {
+        TmdbRepository()
+    }
+
+    var items by remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
-    var loading by remember {
+    var isLoading by remember {
         mutableStateOf(true)
     }
 
@@ -291,186 +312,313 @@ fun HomeScreen(
         mutableStateOf<String?>(null)
     }
 
-    LaunchedEffect(Unit) {
+    var heroIndex by remember {
+        mutableIntStateOf(0)
+    }
+
+    // --------------------------------------------------------
+    // LOAD CATEGORY
+    // --------------------------------------------------------
+
+    LaunchedEffect(selectedCategory) {
+
+        isLoading = true
+        error = null
 
         try {
-            trending = TmdbRepository().getTrending()
-        } catch (e: Exception) {
-            error = e.message ?: "Unable to load TMDB."
-        }
 
-        loading = false
+            items = when (selectedCategory) {
+
+                HomeCategory.TRENDING ->
+                    repository.getTrending()
+
+                HomeCategory.MOVIES ->
+                    repository.getMovies()
+
+                HomeCategory.TV ->
+                    repository.getTvShows()
+
+                HomeCategory.DRAMA ->
+                    repository.getDrama()
+
+                HomeCategory.ANIME ->
+                    repository.getAnime()
+            }
+
+        } catch (e: Exception) {
+
+            error = e.message ?: "Unable to load content."
+
+        } finally {
+
+            isLoading = false
+            heroIndex = 0
+        }
+    }
+
+    // --------------------------------------------------------
+    // HERO AUTO ROTATION
+    // --------------------------------------------------------
+
+    LaunchedEffect(items) {
+
+        while (items.size > 1) {
+
+            delay(3000)
+
+            heroIndex =
+                (heroIndex + 1) % minOf(
+                    items.size,
+                    5
+                )
+        }
     }
 
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
 
-        LazyColumn(
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState())
+        ) {
+
+            // This outer horizontal scroll is intentionally
+            // replaced below by a vertical content container.
+        }
+
+        androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = PaddingValues(
-                top = 14.dp,
-                bottom = 18.dp
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                bottom = 110.dp
             )
         ) {
 
             item {
 
-                TopBar(
-                    onSearch = onSearch,
-                    onProfile = onProfile
+                HomeTopBar(
+                    onSearch = onSearch
                 )
             }
 
             item {
-                Spacer(Modifier.height(16.dp))
-            }
 
-            item {
-                HeroSection(
-                    items = trending,
-                    onClick = onItemClick
+                Spacer(
+                    modifier = Modifier.height(18.dp)
                 )
             }
 
             item {
-                Spacer(Modifier.height(18.dp))
+
+                if (isLoading) {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(360.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+
+                        CircularProgressIndicator(
+                            color = StreamifyRed
+                        )
+                    }
+
+                } else if (
+                    error != null ||
+                    items.isEmpty()
+                ) {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(360.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+
+                        Text(
+                            text = error
+                                ?: "No content available.",
+                            color = StreamifyGrey,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                } else {
+
+                    val heroItems =
+                        items.take(5)
+
+                    HeroCarousel(
+                        items = heroItems,
+                        selectedIndex = heroIndex,
+                        onItemClick = onItemClick
+                    )
+                }
             }
 
             item {
-                CategoryPills()
+
+                Spacer(
+                    modifier = Modifier.height(22.dp)
+                )
             }
 
             item {
-                Spacer(Modifier.height(25.dp))
+
+                CategoryPills(
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = onCategorySelected
+                )
             }
 
-            when {
+            item {
 
-                loading -> {
+                Spacer(
+                    modifier = Modifier.height(26.dp)
+                )
+            }
+
+            if (!isLoading && items.isNotEmpty()) {
+
+                item {
+
+                    SectionHeader(
+                        title = selectedCategory.title,
+                        subtitle = when (selectedCategory) {
+
+                            HomeCategory.TRENDING ->
+                                "What's popular right now"
+
+                            HomeCategory.MOVIES ->
+                                "Popular movies"
+
+                            HomeCategory.TV ->
+                                "Popular TV shows"
+
+                            HomeCategory.DRAMA ->
+                                "Drama collection"
+
+                            HomeCategory.ANIME ->
+                                "Animation & anime"
+                        }
+                    )
+                }
+
+                item {
+
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
+                }
+
+                item {
+
+                    ContentRow(
+                        items = items,
+                        onItemClick = onItemClick
+                    )
+                }
+
+                item {
+
+                    Spacer(
+                        modifier = Modifier.height(28.dp)
+                    )
+                }
+
+                if (selectedCategory == HomeCategory.MOVIES) {
 
                     item {
-                        LoadingView()
+
+                        SectionHeader(
+                            title = "More Movies",
+                            subtitle = "Discover more titles"
+                        )
+                    }
+
+                    item {
+
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
+                        )
+
+                        ContentRow(
+                            items = items.drop(5),
+                            onItemClick = onItemClick
+                        )
                     }
                 }
 
-                error != null -> {
+                if (selectedCategory == HomeCategory.TV) {
 
                     item {
-                        ErrorView(error!!)
+
+                        SectionHeader(
+                            title = "More TV",
+                            subtitle = "Discover more shows"
+                        )
+                    }
+
+                    item {
+
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
+                        )
+
+                        ContentRow(
+                            items = items.drop(5),
+                            onItemClick = onItemClick
+                        )
                     }
                 }
 
-                else -> {
+                if (selectedCategory == HomeCategory.DRAMA) {
 
                     item {
+
                         SectionHeader(
-                            title = "Trending",
-                            subtitle = "What's popular right now"
+                            title = "Drama Picks",
+                            subtitle = "Popular drama titles"
                         )
                     }
 
                     item {
-                        Spacer(Modifier.height(12.dp))
-                    }
 
-                    item {
-                        PosterRow(
-                            items = trending,
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
+                        )
+
+                        ContentRow(
+                            items = items.drop(5),
                             onItemClick = onItemClick
                         )
                     }
+                }
+
+                if (selectedCategory == HomeCategory.ANIME) {
 
                     item {
-                        Spacer(Modifier.height(28.dp))
-                    }
 
-                    item {
                         SectionHeader(
-                            title = "Movies",
-                            subtitle = "Movies from TMDB"
+                            title = "Animation Picks",
+                            subtitle = "Popular animated titles"
                         )
                     }
 
                     item {
-                        Spacer(Modifier.height(12.dp))
-                    }
 
-                    item {
-                        PosterRow(
-                            items = trending.filter {
-                                it.media_type == "movie"
-                            },
-                            onItemClick = onItemClick
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
                         )
-                    }
 
-                    item {
-                        Spacer(Modifier.height(28.dp))
-                    }
-
-                    item {
-                        SectionHeader(
-                            title = "TV",
-                            subtitle = "Series and shows"
-                        )
-                    }
-
-                    item {
-                        Spacer(Modifier.height(12.dp))
-                    }
-
-                    item {
-                        PosterRow(
-                            items = trending.filter {
-                                it.media_type == "tv"
-                            },
-                            onItemClick = onItemClick
-                        )
-                    }
-
-                    item {
-                        Spacer(Modifier.height(28.dp))
-                    }
-
-                    item {
-                        SectionHeader(
-                            title = "Drama",
-                            subtitle = "Drama discovery"
-                        )
-                    }
-
-                    item {
-                        Spacer(Modifier.height(12.dp))
-                    }
-
-                    item {
-                        PosterRow(
-                            items = trending,
-                            onItemClick = onItemClick
-                        )
-                    }
-
-                    item {
-                        Spacer(Modifier.height(28.dp))
-                    }
-
-                    item {
-                        SectionHeader(
-                            title = "Anime",
-                            subtitle = "Anime discovery"
-                        )
-                    }
-
-                    item {
-                        Spacer(Modifier.height(12.dp))
-                    }
-
-                    item {
-                        PosterRow(
-                            items = trending,
+                        ContentRow(
+                            items = items.drop(5),
                             onItemClick = onItemClick
                         )
                     }
@@ -478,7 +626,8 @@ fun HomeScreen(
             }
         }
 
-        BottomNavigation(
+        BottomNavigationBar(
+            selected = StreamifyScreen.HOME,
             onHome = {},
             onMyList = onMyList,
             onDownloads = onDownloads,
@@ -487,106 +636,143 @@ fun HomeScreen(
     }
 }
 
-@Composable
-fun TopBar(
-    onSearch: () -> Unit,
-    onProfile: () -> Unit
+
+// ============================================================
+// TOP BAR
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun HomeTopBar(
+    onSearch: () -> Unit
 ) {
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp),
+            .padding(
+                start = 22.dp,
+                end = 22.dp,
+                top = 18.dp
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
 
-        Column(
-            modifier = Modifier.weight(1f)
+        // Streamify popcorn-style brand mark
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(StreamifyRed),
+            contentAlignment = Alignment.Center
         ) {
 
             Text(
-                text = "🍿 STREAMIFY",
-                color = StreamRed,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.2.sp
-            )
-
-            Text(
-                text = "Entertainment, your way.",
-                color = StreamMuted,
-                fontSize = 11.sp
+                text = "🍿",
+                fontSize = 25.sp
             )
         }
+
+        Spacer(
+            modifier = Modifier.width(10.dp)
+        )
+
+        Text(
+            text = "STREAMIFY",
+            color = StreamifyRed,
+            fontSize = 25.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.5.sp
+        )
+
+        Spacer(
+            modifier = Modifier.weight(1f)
+        )
 
         IconButton(
             onClick = onSearch
         ) {
 
             Icon(
-                Icons.Default.Search,
+                imageVector = Icons.Outlined.Search,
                 contentDescription = "Search",
-                tint = Color.White
+                tint = StreamifyWhite,
+                modifier = Modifier.size(30.dp)
             )
         }
 
-        IconButton(
-            onClick = onProfile
+        Spacer(
+            modifier = Modifier.width(4.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(StreamifyCard),
+            contentAlignment = Alignment.Center
         ) {
 
-            Box(
-                modifier = Modifier
-                    .size(35.dp)
-                    .background(
-                        StreamCard,
-                        RoundedCornerShape(50)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-
-                Icon(
-                    Icons.Default.Person,
-                    contentDescription = "Profile",
-                    tint = StreamGold,
-                    modifier = Modifier.size(19.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Outlined.Person,
+                contentDescription = "Profile",
+                tint = StreamifyGold,
+                modifier = Modifier.size(28.dp)
+            )
         }
     }
 }
 
-@Composable
-fun HeroSection(
+
+// ============================================================
+// HERO
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun HeroCarousel(
     items: List<TmdbItem>,
-    onClick: (TmdbItem) -> Unit
+    selectedIndex: Int,
+    onItemClick: (TmdbItem) -> Unit
 ) {
 
-    val hero = items.firstOrNull {
-        !it.backdrop_path.isNullOrBlank()
-    }
+    if (items.isEmpty()) return
+
+    val safeIndex =
+        selectedIndex.coerceIn(
+            0,
+            items.lastIndex
+        )
+
+    val item = items[safeIndex]
+
+    val title =
+        item.title
+            ?: item.name
+            ?: "Untitled"
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(235.dp)
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(StreamDark)
+            .height(365.dp)
+            .padding(horizontal = 22.dp)
+            .clip(RoundedCornerShape(30.dp))
             .clickable {
-                hero?.let(onClick)
+                onItemClick(item)
             }
     ) {
 
-        hero?.backdrop_path?.let {
-
-            AsyncImage(
-                model = BACKDROP_URL + it,
-                contentDescription =
-                    hero.title ?: hero.name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        }
+        AsyncImage(
+            model =
+                if (item.backdrop_path != null) {
+                    TMDB_IMAGE +
+                            "w780" +
+                            item.backdrop_path
+                } else {
+                    null
+                },
+            contentDescription = title,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
 
         Box(
             modifier = Modifier
@@ -595,7 +781,8 @@ fun HeroSection(
                     Brush.verticalGradient(
                         listOf(
                             Color.Transparent,
-                            Color(0xF5080808)
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.92f)
                         )
                     )
                 )
@@ -604,49 +791,87 @@ fun HeroSection(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(20.dp)
+                .padding(26.dp)
         ) {
 
             Text(
                 text = "TRENDING",
-                color = StreamGold,
-                fontSize = 12.sp,
+                color = StreamifyGold,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             )
 
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = hero?.title
-                    ?: hero?.name
-                    ?: "Discover something new",
-                color = Color.White,
-                fontSize = 25.sp,
-                fontWeight = FontWeight.Bold
+            Spacer(
+                modifier = Modifier.height(8.dp)
             )
 
-            Spacer(Modifier.height(5.dp))
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 31.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(
+                modifier = Modifier.height(6.dp)
+            )
 
             Text(
                 text = "Powered by TMDB",
-                color = StreamMuted,
-                fontSize = 11.sp
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 14.sp
             )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            Row {
+
+                repeat(
+                    minOf(items.size, 5)
+                ) { index ->
+
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 5.dp)
+                            .size(
+                                width =
+                                    if (index == safeIndex)
+                                        22.dp
+                                    else
+                                        7.dp,
+                                height = 7.dp
+                            )
+                            .clip(CircleShape)
+                            .background(
+                                if (index == safeIndex)
+                                    StreamifyRed
+                                else
+                                    Color.White.copy(
+                                        alpha = 0.45f
+                                    )
+                            )
+                    )
+                }
+            }
         }
     }
 }
 
-@Composable
-fun CategoryPills() {
 
-    val categories = listOf(
-        "🔥 Trending",
-        "🎬 Movies",
-        "📺 TV",
-        "🎭 Drama",
-        "🍥 Anime"
-    )
+// ============================================================
+// CATEGORY PILLS
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun CategoryPills(
+    selectedCategory: HomeCategory,
+    onCategorySelected: (HomeCategory) -> Unit
+) {
 
     Row(
         modifier = Modifier
@@ -654,93 +879,118 @@ fun CategoryPills() {
             .horizontalScroll(
                 rememberScrollState()
             )
-            .padding(horizontal = 18.dp),
-        horizontalArrangement =
-            Arrangement.spacedBy(9.dp)
+            .padding(horizontal = 22.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
 
-        categories.forEachIndexed { index, category ->
+        HomeCategory.values().forEach { category ->
 
-            Surface(
-                shape = RoundedCornerShape(50),
-                color =
-                    if (index == 0)
-                        StreamRed
-                    else
-                        StreamCard
+            val selected =
+                selectedCategory == category
+
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(
+                        if (selected)
+                            StreamifyRed
+                        else
+                            StreamifyCard
+                    )
+                    .clickable {
+                        onCategorySelected(category)
+                    }
+                    .padding(
+                        horizontal = 20.dp,
+                        vertical = 13.dp
+                    )
             ) {
 
                 Text(
-                    text = category,
+                    text = when (category) {
+
+                        HomeCategory.TRENDING ->
+                            "🔥 Trending"
+
+                        HomeCategory.MOVIES ->
+                            "🎬 Movies"
+
+                        HomeCategory.TV ->
+                            "📺 TV"
+
+                        HomeCategory.DRAMA ->
+                            "🎭 Drama"
+
+                        HomeCategory.ANIME ->
+                            "🎨 Anime"
+                    },
                     color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight =
-                        if (index == 0)
-                            FontWeight.Bold
-                        else
-                            FontWeight.Normal,
-                    modifier = Modifier.padding(
-                        horizontal = 16.dp,
-                        vertical = 10.dp
-                    )
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
     }
 }
 
-@Composable
-fun SectionHeader(
+
+// ============================================================
+// SECTION HEADER
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun SectionHeader(
     title: String,
     subtitle: String
 ) {
 
     Column(
-        modifier = Modifier.padding(
-            horizontal = 18.dp
-        )
+        modifier = Modifier.padding(horizontal = 22.dp)
     ) {
 
         Text(
             text = title,
             color = Color.White,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 27.sp,
+            fontWeight = FontWeight.ExtraBold
         )
 
-        Spacer(Modifier.height(3.dp))
+        Spacer(
+            modifier = Modifier.height(5.dp)
+        )
 
         Text(
             text = subtitle,
-            color = StreamMuted,
-            fontSize = 11.sp
+            color = StreamifyGrey,
+            fontSize = 14.sp
         )
     }
 }
 
-@Composable
-fun PosterRow(
+
+// ============================================================
+// CONTENT ROW
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun ContentRow(
     items: List<TmdbItem>,
     onItemClick: (TmdbItem) -> Unit
 ) {
 
-    val filtered = items
-        .filter {
-            !it.poster_path.isNullOrBlank()
-        }
-        .take(15)
-
-    LazyRow(
-        contentPadding = PaddingValues(
-            horizontal = 18.dp
-        ),
-        horizontalArrangement =
-            Arrangement.spacedBy(12.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(
+                rememberScrollState()
+            )
+            .padding(horizontal = 22.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
 
-        items(filtered) { item ->
+        items.take(15).forEach { item ->
 
-            PosterCard(
+            ContentCard(
                 item = item,
                 onClick = {
                     onItemClick(item)
@@ -750,83 +1000,111 @@ fun PosterRow(
     }
 }
 
-@Composable
-fun PosterCard(
+
+// ============================================================
+// CONTENT CARD
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun ContentCard(
     item: TmdbItem,
     onClick: () -> Unit
 ) {
 
+    val title =
+        item.title
+            ?: item.name
+            ?: "Untitled"
+
     Column(
         modifier = Modifier
-            .width(122.dp)
-            .clickable(onClick = onClick)
+            .width(160.dp)
+            .clickable {
+                onClick()
+            }
     ) {
 
         Box(
             modifier = Modifier
-                .width(122.dp)
-                .height(180.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(StreamCard)
+                .fillMaxWidth()
+                .height(235.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(StreamifyCard)
         ) {
 
-            item.poster_path?.let {
+            AsyncImage(
+                model =
+                    if (item.poster_path != null) {
+                        TMDB_IMAGE +
+                                "w342" +
+                                item.poster_path
+                    } else {
+                        null
+                    },
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
 
-                AsyncImage(
-                    model = POSTER_URL + it,
-                    contentDescription =
-                        item.title ?: item.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-
-            if ((item.vote_average ?: 0.0) > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(9.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        Color.Black.copy(alpha = 0.75f)
+                    )
+                    .padding(
+                        horizontal = 9.dp,
+                        vertical = 7.dp
+                    )
+            ) {
 
                 Text(
-                    text = String.format(
-                        "%.1f",
-                        item.vote_average
-                    ),
-                    color = StreamGold,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(7.dp)
-                        .background(
-                            Color(0xDD111111),
-                            RoundedCornerShape(7.dp)
-                        )
-                        .padding(
-                            horizontal = 7.dp,
-                            vertical = 4.dp
-                        )
+                    text =
+                        String.format(
+                            "%.1f",
+                            item.vote_average ?: 0.0
+                        ),
+                    color = StreamifyGold,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        Spacer(Modifier.height(7.dp))
+        Spacer(
+            modifier = Modifier.height(9.dp)
+        )
 
         Text(
-            text = item.title
-                ?: item.name
-                ?: "Untitled",
-            color = StreamText,
-            fontSize = 12.sp,
-            maxLines = 2
+            text = title,
+            color = Color.White,
+            fontSize = 16.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
-@Composable
-fun SearchScreen(
+
+// ============================================================
+// SEARCH
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun SearchScreen(
+    initialQuery: String,
     onBack: () -> Unit,
     onItemClick: (TmdbItem) -> Unit
 ) {
 
+    val repository = remember {
+        TmdbRepository()
+    }
+
     var query by remember {
-        mutableStateOf("")
+        mutableStateOf(initialQuery)
     }
 
     var results by remember {
@@ -837,240 +1115,240 @@ fun SearchScreen(
         mutableStateOf(false)
     }
 
-    var searched by remember {
-        mutableStateOf(false)
-    }
+    val scope = rememberCoroutineScope()
 
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(StreamifyBlack)
+            .padding(horizontal = 20.dp)
     ) {
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 12.dp
-                ),
+                .padding(top = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
 
             IconButton(
                 onClick = onBack
             ) {
+
                 Icon(
-                    Icons.Default.ArrowBack,
+                    imageVector = Icons.Outlined.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
             }
 
-            Text(
-                text = "Search",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+            TextField(
+                value = query,
+                onValueChange = {
+                    query = it
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(58.dp),
+                placeholder = {
+                    Text(
+                        "Search movies & shows",
+                        color = StreamifyGrey
+                    )
+                },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = StreamifyCard,
+                    unfocusedContainerColor = StreamifyCard,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent
+                ),
+                shape = RoundedCornerShape(18.dp)
             )
+
+            IconButton(
+                onClick = {
+
+                    scope.launch {
+
+                        if (query.isNotBlank()) {
+
+                            loading = true
+
+                            results =
+                                try {
+                                    repository.search(query)
+                                } catch (
+                                    _: Exception
+                                ) {
+                                    emptyList()
+                                }
+
+                            loading = false
+                        }
+                    }
+                }
+            ) {
+
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = "Search",
+                    tint = StreamifyRed
+                )
+            }
         }
 
-        OutlinedTextField(
-            value = query,
-            onValueChange = {
-                query = it
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp),
-            singleLine = true,
-            placeholder = {
-                Text(
-                    "Search movies, series, anime..."
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null
-                )
-            },
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Search
-            ),
-            keyboardActions = KeyboardActions(
-                onSearch = {
-                    searched = true
-                }
-            ),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = StreamRed,
-                unfocusedBorderColor = StreamCard,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedLeadingIconColor = StreamRed,
-                unfocusedLeadingIconColor = StreamMuted
-            )
+        Spacer(
+            modifier = Modifier.height(20.dp)
         )
 
-        Spacer(Modifier.height(16.dp))
+        if (loading) {
 
-        Button(
-            onClick = {
-                searched = true
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = StreamRed
-            )
-        ) {
-            Text("Search")
-        }
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
 
-        if (searched) {
-
-            LaunchedEffect(query) {
-
-                if (query.isBlank()) {
-                    results = emptyList()
-                    return@LaunchedEffect
-                }
-
-                loading = true
-
-                try {
-                    results =
-                        TmdbRepository().search(query)
-                } finally {
-                    loading = false
-                }
-            }
-        }
-
-        Spacer(Modifier.height(15.dp))
-
-        when {
-
-            loading -> {
-                LoadingView()
-            }
-
-            searched && results.isEmpty() -> {
-
-                Text(
-                    text = "No results found.",
-                    color = StreamMuted,
-                    modifier = Modifier.padding(
-                        horizontal = 18.dp
-                    )
+                CircularProgressIndicator(
+                    color = StreamifyRed
                 )
             }
 
-            else -> {
+        } else {
 
-                LazyColumn(
-                    contentPadding =
-                        PaddingValues(
-                            horizontal = 18.dp,
-                            vertical = 8.dp
-                        ),
-                    verticalArrangement =
-                        Arrangement.spacedBy(12.dp)
-                ) {
+            androidx.compose.foundation.lazy.LazyColumn(
+                verticalArrangement =
+                    Arrangement.spacedBy(12.dp)
+            ) {
 
-                    items(results) { item ->
+                items(
+                    count = results.size
+                ) { index ->
 
-                        SearchResultCard(
-                            item = item,
-                            onClick = {
-                                onItemClick(item)
-                            }
-                        )
-                    }
+                    SearchResultCard(
+                        item = results[index],
+                        onClick = {
+                            onItemClick(results[index])
+                        }
+                    )
                 }
             }
         }
     }
 }
 
-@Composable
-fun SearchResultCard(
+
+// ============================================================
+// SEARCH RESULT
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun SearchResultCard(
     item: TmdbItem,
     onClick: () -> Unit
 ) {
 
+    val title =
+        item.title
+            ?: item.name
+            ?: "Untitled"
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(StreamCard)
-            .clickable(onClick = onClick)
-            .padding(9.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(StreamifyCard)
+            .clickable {
+                onClick()
+            }
+            .padding(10.dp)
     ) {
 
         AsyncImage(
-            model = POSTER_URL +
-                    (item.poster_path ?: ""),
-            contentDescription =
-                item.title ?: item.name,
+            model =
+                if (item.poster_path != null) {
+                    TMDB_IMAGE +
+                            "w185" +
+                            item.poster_path
+                } else {
+                    null
+                },
+            contentDescription = title,
             modifier = Modifier
-                .width(75.dp)
-                .height(105.dp)
-                .clip(RoundedCornerShape(9.dp)),
+                .size(
+                    width = 70.dp,
+                    height = 100.dp
+                )
+                .clip(RoundedCornerShape(12.dp)),
             contentScale = ContentScale.Crop
         )
 
-        Spacer(Modifier.width(12.dp))
+        Spacer(
+            modifier = Modifier.width(14.dp)
+        )
 
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(top = 5.dp)
+            modifier = Modifier.weight(1f)
         ) {
 
             Text(
-                text = item.title
-                    ?: item.name
-                    ?: "Untitled",
+                text = title,
                 color = Color.White,
-                fontSize = 16.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(
+                modifier = Modifier.height(7.dp)
+            )
 
             Text(
                 text =
                     if (item.media_type == "tv")
-                        "TV Series"
+                        "TV"
                     else
                         "Movie",
-                color = StreamRed,
-                fontSize = 11.sp
+                color = StreamifyRed,
+                fontSize = 13.sp
             )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(
+                modifier = Modifier.height(7.dp)
+            )
 
             Text(
-                text = item.overview
-                    ?: "No description available.",
-                color = StreamMuted,
-                fontSize = 11.sp,
-                maxLines = 4
+                text =
+                    item.overview
+                        ?: "No description available.",
+                color = StreamifyGrey,
+                fontSize = 13.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
 
-@Composable
-fun DetailScreen(
+
+// ============================================================
+// DETAIL
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun DetailScreen(
     item: TmdbItem,
-    isInMyList: Boolean,
+    isInList: Boolean,
     onBack: () -> Unit,
-    onAddToList: () -> Unit,
+    onToggleList: () -> Unit,
     onDownload: () -> Unit,
     onSimilarClick: (TmdbItem) -> Unit
 ) {
+
+    val repository = remember {
+        TmdbRepository()
+    }
 
     var details by remember {
         mutableStateOf(item)
@@ -1084,22 +1362,29 @@ fun DetailScreen(
 
         try {
 
-            val repository = TmdbRepository()
-
             details =
                 repository.getDetails(item)
 
             similar =
                 repository.getSimilar(item)
-                    .take(10)
 
         } catch (_: Exception) {
+            // Keep original item if detail request fails.
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 35.dp)
+    val title =
+        details.title
+            ?: details.name
+            ?: "Untitled"
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(StreamifyBlack),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            bottom = 40.dp
+        )
     ) {
 
         item {
@@ -1107,19 +1392,22 @@ fun DetailScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(310.dp)
+                    .height(400.dp)
             ) {
 
-                details.backdrop_path?.let {
-
-                    AsyncImage(
-                        model = BACKDROP_URL + it,
-                        contentDescription =
-                            details.title ?: details.name,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
+                AsyncImage(
+                    model =
+                        if (details.backdrop_path != null) {
+                            TMDB_IMAGE +
+                                    "w780" +
+                                    details.backdrop_path
+                        } else {
+                            null
+                        },
+                    contentDescription = title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
 
                 Box(
                     modifier = Modifier
@@ -1127,8 +1415,8 @@ fun DetailScreen(
                         .background(
                             Brush.verticalGradient(
                                 listOf(
-                                    Color.Transparent,
-                                    StreamBlack
+                                    Color.Black.copy(alpha = 0.2f),
+                                    StreamifyBlack
                                 )
                             )
                         )
@@ -1136,13 +1424,12 @@ fun DetailScreen(
 
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier
-                        .padding(10.dp)
-                        .align(Alignment.TopStart)
+                    modifier = Modifier.padding(12.dp)
                 ) {
 
                     Icon(
-                        Icons.Default.ArrowBack,
+                        imageVector =
+                            Icons.Outlined.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White
                     )
@@ -1153,148 +1440,96 @@ fun DetailScreen(
         item {
 
             Column(
-                modifier = Modifier.padding(
-                    horizontal = 18.dp
-                )
+                modifier = Modifier
+                    .padding(horizontal = 22.dp)
             ) {
 
                 Text(
-                    text = details.title
-                        ?: details.name
-                        ?: "Untitled",
+                    text = title,
                     color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
 
                 Text(
                     text =
-                        if (details.media_type == "tv")
-                            "TV Series"
-                        else
-                            "Movie",
-                    color = StreamRed,
-                    fontSize = 12.sp
+                        "⭐ ${
+                            String.format(
+                                "%.1f",
+                                details.vote_average ?: 0.0
+                            )
+                        }",
+                    color = StreamifyGold,
+                    fontSize = 15.sp
                 )
 
-                Spacer(Modifier.height(15.dp))
+                Spacer(
+                    modifier = Modifier.height(18.dp)
+                )
 
                 Row(
                     horizontalArrangement =
                         Arrangement.spacedBy(10.dp)
                 ) {
 
-                    Button(
+                    DetailButton(
+                        icon = Icons.Outlined.PlayArrow,
+                        text = "Play",
                         onClick = {
-                            // Playback source will be connected here.
+                            // Playback source intentionally
+                            // remains unconnected.
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = StreamRed
-                        )
-                    ) {
+                        primary = true
+                    )
 
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null
-                        )
-
-                        Spacer(Modifier.width(5.dp))
-
-                        Text("Play")
-                    }
-
-                    Button(
-                        onClick = onAddToList,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = StreamCard
-                        )
-                    ) {
-
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = null,
-                            tint =
-                                if (isInMyList)
-                                    StreamGold
-                                else
-                                    Color.White
-                        )
-
-                        Spacer(Modifier.width(5.dp))
-
-                        Text(
-                            if (isInMyList)
-                                "Saved"
+                    DetailButton(
+                        icon =
+                            if (isInList)
+                                Icons.Outlined.Check
                             else
-                                "My List"
-                        )
-                    }
+                                Icons.Outlined.StarBorder,
+                        text =
+                            if (isInList)
+                                "Added"
+                            else
+                                "My List",
+                        onClick = onToggleList
+                    )
+
+                    DetailButton(
+                        icon = Icons.Outlined.Download,
+                        text = "Download",
+                        onClick = onDownload
+                    )
                 }
 
-                Spacer(Modifier.height(12.dp))
-
-                Row(
-                    horizontalArrangement =
-                        Arrangement.spacedBy(10.dp)
-                ) {
-
-                    Button(
-                        onClick = onDownload,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = StreamCard
-                        )
-                    ) {
-
-                        Icon(
-                            Icons.Default.Download,
-                            contentDescription = null
-                        )
-
-                        Spacer(Modifier.width(5.dp))
-
-                        Text("Download")
-                    }
-
-                    Button(
-                        onClick = { },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = StreamCard
-                        )
-                    ) {
-
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = null
-                        )
-
-                        Spacer(Modifier.width(5.dp))
-
-                        Text("Share")
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
+                Spacer(
+                    modifier = Modifier.height(24.dp)
+                )
 
                 Text(
                     text = "About",
                     color = Color.White,
-                    fontSize = 19.sp,
+                    fontSize = 21.sp,
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    text = details.overview
-                        ?: "No description available.",
-                    color = StreamMuted,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp
+                Spacer(
+                    modifier = Modifier.height(8.dp)
                 )
 
-                Spacer(Modifier.height(25.dp))
+                Text(
+                    text =
+                        details.overview
+                            ?: "No description available.",
+                    color = StreamifyGrey,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
             }
         }
 
@@ -1302,22 +1537,20 @@ fun DetailScreen(
 
             item {
 
-                Text(
-                    text = "Similar",
-                    color = Color.White,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(
-                        horizontal = 18.dp
-                    )
+                Spacer(
+                    modifier = Modifier.height(28.dp)
                 )
 
-                Spacer(Modifier.height(12.dp))
-            }
+                SectionHeader(
+                    title = "You May Also Like",
+                    subtitle = "Similar titles"
+                )
 
-            item {
+                Spacer(
+                    modifier = Modifier.height(14.dp)
+                )
 
-                PosterRow(
+                ContentRow(
                     items = similar,
                     onItemClick = onSimilarClick
                 )
@@ -1326,8 +1559,65 @@ fun DetailScreen(
     }
 }
 
-@Composable
-fun CollectionScreen(
+
+// ============================================================
+// DETAIL BUTTON
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun DetailButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    primary: Boolean = false
+) {
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (primary)
+                    StreamifyRed
+                else
+                    StreamifyCard
+            )
+            .clickable {
+                onClick()
+            }
+            .padding(
+                horizontal = 13.dp,
+                vertical = 11.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
+
+        Spacer(
+            modifier = Modifier.width(6.dp)
+        )
+
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+
+// ============================================================
+// COLLECTION
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun SimpleCollectionScreen(
     title: String,
     items: List<TmdbItem>,
     emptyText: String,
@@ -1336,16 +1626,15 @@ fun CollectionScreen(
 ) {
 
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(StreamifyBlack)
     ) {
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 12.dp
-                ),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
 
@@ -1354,7 +1643,7 @@ fun CollectionScreen(
             ) {
 
                 Icon(
-                    Icons.Default.ArrowBack,
+                    imageVector = Icons.Outlined.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -1363,7 +1652,7 @@ fun CollectionScreen(
             Text(
                 text = title,
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -1377,59 +1666,52 @@ fun CollectionScreen(
 
                 Text(
                     text = emptyText,
-                    color = StreamMuted,
-                    fontSize = 13.sp
+                    color = StreamifyGrey
                 )
             }
 
         } else {
 
-            LazyColumn(
-                contentPadding =
-                    PaddingValues(18.dp),
-                verticalArrangement =
-                    Arrangement.spacedBy(15.dp)
-            ) {
+            androidx.compose.foundation.lazy.LazyColumn {
 
-                items(items.chunked(2)) { rowItems ->
+                items(items.size) { index ->
 
-                    Row(
-                        horizontalArrangement =
-                            Arrangement.spacedBy(15.dp)
-                    ) {
-
-                        rowItems.forEach { item ->
-
-                            PosterCard(
-                                item = item,
-                                onClick = {
-                                    onItemClick(item)
-                                }
-                            )
+                    SearchResultCard(
+                        item = items[index],
+                        onClick = {
+                            onItemClick(items[index])
                         }
-                    }
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(10.dp)
+                    )
                 }
             }
         }
     }
 }
 
-@Composable
-fun SettingsScreen(
+
+// ============================================================
+// SETTINGS
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun SettingsScreen(
     onBack: () -> Unit
 ) {
 
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(StreamifyBlack)
     ) {
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 12.dp
-                ),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
 
@@ -1438,7 +1720,7 @@ fun SettingsScreen(
             ) {
 
                 Icon(
-                    Icons.Default.ArrowBack,
+                    imageVector = Icons.Outlined.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -1447,153 +1729,152 @@ fun SettingsScreen(
             Text(
                 text = "Settings",
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        SettingRow(
+        SettingsRow(
             title = "Account",
             subtitle = "Login and subscription"
         )
 
-        SettingRow(
+        SettingsRow(
             title = "Playback",
-            subtitle = "Quality and player settings"
+            subtitle = "Video quality and playback settings"
         )
 
-        SettingRow(
+        SettingsRow(
             title = "Downloads",
             subtitle = "Manage downloaded content"
         )
 
-        SettingRow(
-            title = "Notifications",
-            subtitle = "Streamify notifications"
-        )
-
-        SettingRow(
+        SettingsRow(
             title = "About Streamify",
-            subtitle = "App information and TMDB attribution"
+            subtitle = "App information"
         )
     }
 }
 
-@Composable
-fun SettingRow(
+
+@androidx.compose.runtime.Composable
+private fun SettingsRow(
     title: String,
     subtitle: String
 ) {
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { }
+            .clickable {}
             .padding(
-                horizontal = 20.dp,
+                horizontal = 22.dp,
                 vertical = 18.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
+            )
     ) {
 
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold
+        )
 
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
-            )
+        Spacer(
+            modifier = Modifier.height(4.dp)
+        )
 
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = subtitle,
-                color = StreamMuted,
-                fontSize = 11.sp
-            )
-        }
-
-        Icon(
-            Icons.Default.Settings,
-            contentDescription = null,
-            tint = StreamMuted,
-            modifier = Modifier.size(20.dp)
+        Text(
+            text = subtitle,
+            color = StreamifyGrey,
+            fontSize = 13.sp
         )
     }
 }
 
-@Composable
-fun BottomNavigation(
+
+// ============================================================
+// BOTTOM NAV
+// ============================================================
+
+@androidx.compose.runtime.Composable
+private fun BottomNavigationBar(
+    selected: StreamifyScreen,
     onHome: () -> Unit,
     onMyList: () -> Unit,
     onDownloads: () -> Unit,
     onSettings: () -> Unit
 ) {
 
-    Surface(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                horizontal = 18.dp,
-                vertical = 10.dp
+                horizontal = 22.dp,
+                vertical = 12.dp
+            )
+            .clip(RoundedCornerShape(32.dp))
+            .background(StreamifyCard)
+            .padding(
+                vertical = 13.dp
             ),
-        shape = RoundedCornerShape(25.dp),
-        color = Color(0xEE191919)
+        horizontalArrangement =
+            Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
     ) {
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 9.dp),
-            horizontalArrangement =
-                Arrangement.SpaceEvenly
-        ) {
+        BottomNavItem(
+            icon = Icons.Outlined.Home,
+            label = "Home",
+            selected =
+                selected == StreamifyScreen.HOME,
+            onClick = onHome
+        )
 
-            NavItem(
-                icon = Icons.Default.Home,
-                label = "Home",
-                onClick = onHome,
-                selected = true
-            )
+        BottomNavItem(
+            icon = Icons.Outlined.StarBorder,
+            label = "My List",
+            selected =
+                selected == StreamifyScreen.MY_LIST,
+            onClick = onMyList
+        )
 
-            NavItem(
-                icon = Icons.Default.Star,
-                label = "My List",
-                onClick = onMyList
-            )
+        BottomNavItem(
+            icon = Icons.Outlined.Download,
+            label = "Downloads",
+            selected =
+                selected == StreamifyScreen.DOWNLOADS,
+            onClick = onDownloads
+        )
 
-            NavItem(
-                icon = Icons.Default.Download,
-                label = "Downloads",
-                onClick = onDownloads
-            )
-
-            NavItem(
-                icon = Icons.Default.Settings,
-                label = "Settings",
-                onClick = onSettings
-            )
-        }
+        BottomNavItem(
+            icon = Icons.Outlined.Settings,
+            label = "Settings",
+            selected =
+                selected == StreamifyScreen.SETTINGS,
+            onClick = onSettings
+        )
     }
 }
 
-@Composable
-fun NavItem(
+
+@androidx.compose.runtime.Composable
+private fun BottomNavItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    onClick: () -> Unit,
-    selected: Boolean = false
+    selected: Boolean,
+    onClick: () -> Unit
 ) {
 
     Column(
-        modifier = Modifier.clickable(
-            onClick = onClick
-        ),
-        horizontalAlignment =
-            Alignment.CenterHorizontally
+        modifier = Modifier
+            .clickable {
+                onClick()
+            }
+            .padding(
+                horizontal = 10.dp
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
         Icon(
@@ -1601,13 +1882,15 @@ fun NavItem(
             contentDescription = label,
             tint =
                 if (selected)
-                    StreamRed
+                    StreamifyRed
                 else
-                    StreamMuted,
-            modifier = Modifier.size(22.dp)
+                    StreamifyGrey,
+            modifier = Modifier.size(26.dp)
         )
 
-        Spacer(Modifier.height(3.dp))
+        Spacer(
+            modifier = Modifier.height(4.dp)
+        )
 
         Text(
             text = label,
@@ -1615,44 +1898,8 @@ fun NavItem(
                 if (selected)
                     Color.White
                 else
-                    StreamMuted,
-            fontSize = 9.sp
-        )
-    }
-}
-
-@Composable
-fun LoadingView() {
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp),
-        contentAlignment = Alignment.Center
-    ) {
-
-        CircularProgressIndicator(
-            color = StreamRed
-        )
-    }
-}
-
-@Composable
-fun ErrorView(
-    message: String
-) {
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp),
-        contentAlignment = Alignment.Center
-    ) {
-
-        Text(
-            text = message,
-            color = StreamMuted,
-            fontSize = 12.sp
+                    StreamifyGrey,
+            fontSize = 11.sp
         )
     }
 }
