@@ -1592,9 +1592,11 @@ private fun SimpleCollectionScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    horizontal = 12.dp,
-                    bottom = 30.dp
-                ),
+    start = 12.dp,
+    top = 0.dp,
+    end = 12.dp,
+    bottom = 30.dp
+),
                 verticalArrangement =
                     Arrangement.spacedBy(10.dp)
             ) {
