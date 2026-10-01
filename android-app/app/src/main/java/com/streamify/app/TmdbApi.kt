@@ -18,12 +18,17 @@ interface TmdbApi {
         @Query("page") page: Int = 1
     ): TmdbResponse
 
+    // ============================================================
+    // MOVIES / TV DISCOVERY
+    // ============================================================
+
     @GET("discover/movie")
     suspend fun discoverMovies(
         @Query("api_key") apiKey: String,
         @Query("page") page: Int = 1,
         @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_genres") genres: String? = null
+        @Query("with_genres") genres: String? = null,
+        @Query("with_original_language") language: String? = null
     ): TmdbResponse
 
     @GET("discover/tv")
@@ -31,40 +36,13 @@ interface TmdbApi {
         @Query("api_key") apiKey: String,
         @Query("page") page: Int = 1,
         @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_genres") genres: String? = null
+        @Query("with_genres") genres: String? = null,
+        @Query("with_original_language") language: String? = null
     ): TmdbResponse
 
-    @GET("discover/movie")
-    suspend fun discoverDramaMovies(
-        @Query("api_key") apiKey: String,
-        @Query("page") page: Int = 1,
-        @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_genres") genres: String = "18"
-    ): TmdbResponse
-
-    @GET("discover/tv")
-    suspend fun discoverDramaTv(
-        @Query("api_key") apiKey: String,
-        @Query("page") page: Int = 1,
-        @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_genres") genres: String = "18"
-    ): TmdbResponse
-
-    @GET("discover/movie")
-    suspend fun discoverAnimationMovies(
-        @Query("api_key") apiKey: String,
-        @Query("page") page: Int = 1,
-        @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_genres") genres: String = "16"
-    ): TmdbResponse
-
-    @GET("discover/tv")
-    suspend fun discoverAnimationTv(
-        @Query("api_key") apiKey: String,
-        @Query("page") page: Int = 1,
-        @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_genres") genres: String = "16"
-    ): TmdbResponse
+    // ============================================================
+    // DETAILS
+    // ============================================================
 
     @GET("movie/{movie_id}")
     suspend fun getMovieDetails(
@@ -77,6 +55,10 @@ interface TmdbApi {
         @Path("tv_id") tvId: Int,
         @Query("api_key") apiKey: String
     ): TmdbItem
+
+    // ============================================================
+    // SIMILAR
+    // ============================================================
 
     @GET("movie/{movie_id}/similar")
     suspend fun getSimilarMovies(
@@ -108,12 +90,13 @@ data class TmdbItem(
     val vote_average: Double? = null,
     val media_type: String? = null,
 
-    // Required for real TMDB language/category filtering
     val original_language: String? = null,
 
     val release_date: String? = null,
     val first_air_date: String? = null,
+
     val genres: List<TmdbGenre>? = null,
+
     val runtime: Int? = null,
     val number_of_seasons: Int? = null
 )
