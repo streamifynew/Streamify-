@@ -659,17 +659,20 @@ private fun HomeTopBar(
 
         // Streamify popcorn-style brand mark
         Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(StreamifyRed),
-            contentAlignment = Alignment.Center
-        ) {
+    modifier = Modifier
+        .size(48.dp)
+        .clip(RoundedCornerShape(14.dp))
+        .background(Color.Transparent),
+    contentAlignment = Alignment.Center
+) {
 
-            Text(
-                text = "🍿",
-                fontSize = 25.sp
-            )
+    androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(
+            id = com.streamify.app.R.drawable.streamify_logo
+        ),
+        contentDescription = "Streamify",
+        modifier = Modifier.fillMaxSize()
+    )
         }
 
         Spacer(
