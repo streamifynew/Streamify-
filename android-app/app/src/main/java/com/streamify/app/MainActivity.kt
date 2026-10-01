@@ -2,6 +2,7 @@ package com.streamify.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,19 +19,31 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,9 +59,34 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+
+private val StreamBlack = Color(0xFF080808)
+private val StreamDark = Color(0xFF101010)
+private val StreamCard = Color(0xFF191919)
+private val StreamRed = Color(0xFFFF3B22)
+private val StreamOrange = Color(0xFFFF7A00)
+private val StreamGold = Color(0xFFFFD58A)
+private val StreamText = Color(0xFFF5F5F5)
+private val StreamMuted = Color(0xFF999999)
+
+private const val POSTER_URL =
+    "https://image.tmdb.org/t/p/w500"
+
+private const val BACKDROP_URL =
+    "https://image.tmdb.org/t/p/w1280"
+
+private enum class Screen {
+    HOME,
+    SEARCH,
+    DETAIL,
+    MY_LIST,
+    DOWNLOADS,
+    SETTINGS
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -57,26 +95,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             StreamifyTheme {
-                StreamifyHome()
+                StreamifyApp()
             }
         }
     }
 }
-
-private val StreamBlack = Color(0xFF080808)
-private val StreamDark = Color(0xFF111111)
-private val StreamCard = Color(0xFF191919)
-private val StreamRed = Color(0xFFFF4D2E)
-private val StreamOrange = Color(0xFFFF7A00)
-private val StreamGold = Color(0xFFFFD58A)
-private val StreamText = Color(0xFFF5F5F5)
-private val StreamMuted = Color(0xFF9A9A9A)
-
-private const val TMDB_POSTER_BASE_URL =
-    "https://image.tmdb.org/t/p/w500"
-
-private const val TMDB_BACKDROP_BASE_URL =
-    "https://image.tmdb.org/t/p/w1280"
 
 @Composable
 fun StreamifyTheme(
@@ -88,31 +111,34 @@ fun StreamifyTheme(
 }
 
 @Composable
-fun StreamifyHome() {
+fun StreamifyApp() {
 
-    var trending by remember {
+    var screen by remember {
+        mutableStateOf(Screen.HOME)
+    }
+
+    var selectedItem by remember {
+        mutableStateOf<TmdbItem?>(null)
+    }
+
+    var myList by remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
-    var isLoading by remember {
-        mutableStateOf(true)
+    var downloads by remember {
+        mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
-    var errorMessage by remember {
-        mutableStateOf<String?>(null)
+    fun openDetails(item: TmdbItem) {
+        selectedItem = item
+        screen = Screen.DETAIL
     }
 
-    LaunchedEffect(Unit) {
-
-        try {
-            val repository = TmdbRepository()
-            trending = repository.getTrending()
-        } catch (exception: Exception) {
-            errorMessage =
-                exception.message ?: "Unable to load TMDB data."
-        } finally {
-            isLoading = false
-        }
+    BackHandler(
+        enabled = screen != Screen.HOME
+    ) {
+        screen = Screen.HOME
+        selectedItem = null
     }
 
     Box(
@@ -121,156 +147,351 @@ fun StreamifyHome() {
             .background(StreamBlack)
     ) {
 
-        Column(
+        when (screen) {
+
+            Screen.HOME -> {
+                HomeScreen(
+                    onSearch = {
+                        screen = Screen.SEARCH
+                    },
+                    onProfile = {
+                        screen = Screen.SETTINGS
+                    },
+                    onItemClick = ::openDetails,
+                    onMyList = {
+                        screen = Screen.MY_LIST
+                    },
+                    onDownloads = {
+                        screen = Screen.DOWNLOADS
+                    },
+                    onSettings = {
+                        screen = Screen.SETTINGS
+                    }
+                )
+            }
+
+            Screen.SEARCH -> {
+                SearchScreen(
+                    onBack = {
+                        screen = Screen.HOME
+                    },
+                    onItemClick = ::openDetails
+                )
+            }
+
+            Screen.DETAIL -> {
+
+                selectedItem?.let { item ->
+
+                    DetailScreen(
+                        item = item,
+                        isInMyList = myList.any {
+                            it.id == item.id &&
+                            it.media_type == item.media_type
+                        },
+                        onBack = {
+                            screen = Screen.HOME
+                            selectedItem = null
+                        },
+                        onAddToList = {
+
+                            val exists = myList.any {
+                                it.id == item.id &&
+                                it.media_type == item.media_type
+                            }
+
+                            myList =
+                                if (exists) {
+                                    myList.filterNot {
+                                        it.id == item.id &&
+                                        it.media_type == item.media_type
+                                    }
+                                } else {
+                                    myList + item
+                                }
+                        },
+                        onDownload = {
+
+                            if (
+                                downloads.none {
+                                    it.id == item.id &&
+                                    it.media_type == item.media_type
+                                }
+                            ) {
+                                downloads =
+                                    downloads + item
+                            }
+
+                            screen = Screen.DOWNLOADS
+                        },
+                        onSimilarClick = ::openDetails
+                    )
+                }
+            }
+
+            Screen.MY_LIST -> {
+
+                CollectionScreen(
+                    title = "My List",
+                    items = myList,
+                    emptyText =
+                        "Your saved movies and shows will appear here.",
+                    onBack = {
+                        screen = Screen.HOME
+                    },
+                    onItemClick = ::openDetails
+                )
+            }
+
+            Screen.DOWNLOADS -> {
+
+                CollectionScreen(
+                    title = "Downloads",
+                    items = downloads,
+                    emptyText =
+                        "Your downloaded content will appear here.",
+                    onBack = {
+                        screen = Screen.HOME
+                    },
+                    onItemClick = ::openDetails
+                )
+            }
+
+            Screen.SETTINGS -> {
+
+                SettingsScreen(
+                    onBack = {
+                        screen = Screen.HOME
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeScreen(
+    onSearch: () -> Unit,
+    onProfile: () -> Unit,
+    onItemClick: (TmdbItem) -> Unit,
+    onMyList: () -> Unit,
+    onDownloads: () -> Unit,
+    onSettings: () -> Unit
+) {
+
+    var trending by remember {
+        mutableStateOf<List<TmdbItem>>(emptyList())
+    }
+
+    var loading by remember {
+        mutableStateOf(true)
+    }
+
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(Unit) {
+
+        try {
+            trending = TmdbRepository().getTrending()
+        } catch (e: Exception) {
+            error = e.message ?: "Unable to load TMDB."
+        }
+
+        loading = false
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+
+        LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 82.dp)
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(
+                top = 14.dp,
+                bottom = 18.dp
+            )
         ) {
 
-            Spacer(
-                modifier = Modifier.height(16.dp)
-            )
+            item {
 
-            TopBar()
+                TopBar(
+                    onSearch = onSearch,
+                    onProfile = onProfile
+                )
+            }
 
-            Spacer(
-                modifier = Modifier.height(18.dp)
-            )
+            item {
+                Spacer(Modifier.height(16.dp))
+            }
 
-            HeroSection(
-                trending = trending
-            )
+            item {
+                HeroSection(
+                    items = trending,
+                    onClick = onItemClick
+                )
+            }
 
-            Spacer(
-                modifier = Modifier.height(18.dp)
-            )
+            item {
+                Spacer(Modifier.height(18.dp))
+            }
 
-            CategoryRow()
+            item {
+                CategoryPills()
+            }
 
-            Spacer(
-                modifier = Modifier.height(25.dp)
-            )
+            item {
+                Spacer(Modifier.height(25.dp))
+            }
 
             when {
-                isLoading -> {
 
-                    LoadingSection()
+                loading -> {
+
+                    item {
+                        LoadingView()
+                    }
                 }
 
-                errorMessage != null -> {
+                error != null -> {
 
-                    ErrorSection(
-                        message = errorMessage!!
-                    )
-                }
-
-                trending.isEmpty() -> {
-
-                    ErrorSection(
-                        message = "No TMDB results available."
-                    )
+                    item {
+                        ErrorView(error!!)
+                    }
                 }
 
                 else -> {
 
-                    StreamSection(
-                        title = "Trending",
-                        subtitle = "What's popular right now"
-                    )
+                    item {
+                        SectionHeader(
+                            title = "Trending",
+                            subtitle = "What's popular right now"
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(12.dp))
+                    }
 
-                    TmdbPosterRow(
-                        items = trending
-                    )
+                    item {
+                        PosterRow(
+                            items = trending,
+                            onItemClick = onItemClick
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(26.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(28.dp))
+                    }
 
-                    StreamSection(
-                        title = "Movies",
-                        subtitle = "Discover movies from TMDB"
-                    )
+                    item {
+                        SectionHeader(
+                            title = "Movies",
+                            subtitle = "Movies from TMDB"
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(12.dp))
+                    }
 
-                    TmdbPosterRow(
-                        items = trending.filter {
-                            it.media_type == "movie"
-                        }
-                    )
+                    item {
+                        PosterRow(
+                            items = trending.filter {
+                                it.media_type == "movie"
+                            },
+                            onItemClick = onItemClick
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(26.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(28.dp))
+                    }
 
-                    StreamSection(
-                        title = "TV",
-                        subtitle = "Series and shows from TMDB"
-                    )
+                    item {
+                        SectionHeader(
+                            title = "TV",
+                            subtitle = "Series and shows"
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(12.dp))
+                    }
 
-                    TmdbPosterRow(
-                        items = trending.filter {
-                            it.media_type == "tv"
-                        }
-                    )
+                    item {
+                        PosterRow(
+                            items = trending.filter {
+                                it.media_type == "tv"
+                            },
+                            onItemClick = onItemClick
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(26.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(28.dp))
+                    }
 
-                    StreamSection(
-                        title = "Drama",
-                        subtitle = "Drama discovery"
-                    )
+                    item {
+                        SectionHeader(
+                            title = "Drama",
+                            subtitle = "Drama discovery"
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(12.dp))
+                    }
 
-                    TmdbPosterRow(
-                        items = trending
-                    )
+                    item {
+                        PosterRow(
+                            items = trending,
+                            onItemClick = onItemClick
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(26.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(28.dp))
+                    }
 
-                    StreamSection(
-                        title = "Anime",
-                        subtitle = "Anime discovery"
-                    )
+                    item {
+                        SectionHeader(
+                            title = "Anime",
+                            subtitle = "Anime discovery"
+                        )
+                    }
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+                    item {
+                        Spacer(Modifier.height(12.dp))
+                    }
 
-                    TmdbPosterRow(
-                        items = trending
-                    )
+                    item {
+                        PosterRow(
+                            items = trending,
+                            onItemClick = onItemClick
+                        )
+                    }
                 }
             }
         }
 
         BottomNavigation(
-            modifier = Modifier.align(
-                Alignment.BottomCenter
-            )
+            onHome = {},
+            onMyList = onMyList,
+            onDownloads = onDownloads,
+            onSettings = onSettings
         )
     }
 }
 
 @Composable
-fun TopBar() {
+fun TopBar(
+    onSearch: () -> Unit,
+    onProfile: () -> Unit
+) {
 
     Row(
         modifier = Modifier
@@ -284,11 +505,11 @@ fun TopBar() {
         ) {
 
             Text(
-                text = "STREAMIFY",
+                text = "🍿 STREAMIFY",
                 color = StreamRed,
-                fontSize = 25.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.5.sp
+                letterSpacing = 1.2.sp
             )
 
             Text(
@@ -299,23 +520,23 @@ fun TopBar() {
         }
 
         IconButton(
-            onClick = { }
+            onClick = onSearch
         ) {
 
             Icon(
-                imageVector = Icons.Default.Search,
+                Icons.Default.Search,
                 contentDescription = "Search",
                 tint = Color.White
             )
         }
 
         IconButton(
-            onClick = { }
+            onClick = onProfile
         ) {
 
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(35.dp)
                     .background(
                         StreamCard,
                         RoundedCornerShape(50)
@@ -323,10 +544,11 @@ fun TopBar() {
                 contentAlignment = Alignment.Center
             ) {
 
-                Text(
-                    text = "S",
-                    color = StreamGold,
-                    fontWeight = FontWeight.Bold
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = "Profile",
+                    tint = StreamGold,
+                    modifier = Modifier.size(19.dp)
                 )
             }
         }
@@ -335,29 +557,30 @@ fun TopBar() {
 
 @Composable
 fun HeroSection(
-    trending: List<TmdbItem>
+    items: List<TmdbItem>,
+    onClick: (TmdbItem) -> Unit
 ) {
 
-    val hero = trending.firstOrNull {
+    val hero = items.firstOrNull {
         !it.backdrop_path.isNullOrBlank()
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(225.dp)
+            .height(235.dp)
             .padding(horizontal = 16.dp)
-            .clip(
-                RoundedCornerShape(24.dp)
-            )
+            .clip(RoundedCornerShape(24.dp))
             .background(StreamDark)
+            .clickable {
+                hero?.let(onClick)
+            }
     ) {
 
-        if (!hero?.backdrop_path.isNullOrBlank()) {
+        hero?.backdrop_path?.let {
 
             AsyncImage(
-                model = TMDB_BACKDROP_BASE_URL +
-                        hero!!.backdrop_path,
+                model = BACKDROP_URL + it,
                 contentDescription =
                     hero.title ?: hero.name,
                 modifier = Modifier.fillMaxSize(),
@@ -372,7 +595,7 @@ fun HeroSection(
                     Brush.verticalGradient(
                         listOf(
                             Color.Transparent,
-                            Color(0xEE080808)
+                            Color(0xF5080808)
                         )
                     )
                 )
@@ -385,30 +608,25 @@ fun HeroSection(
         ) {
 
             Text(
-                text = "STREAMIFY",
+                text = "TRENDING",
                 color = StreamGold,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             )
 
-            Spacer(
-                modifier = Modifier.height(4.dp)
-            )
+            Spacer(Modifier.height(4.dp))
 
             Text(
                 text = hero?.title
                     ?: hero?.name
                     ?: "Discover something new",
                 color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2
+                fontSize = 25.sp,
+                fontWeight = FontWeight.Bold
             )
 
-            Spacer(
-                modifier = Modifier.height(4.dp)
-            )
+            Spacer(Modifier.height(5.dp))
 
             Text(
                 text = "Powered by TMDB",
@@ -420,14 +638,14 @@ fun HeroSection(
 }
 
 @Composable
-fun CategoryRow() {
+fun CategoryPills() {
 
     val categories = listOf(
-        "Trending",
-        "Movies",
-        "TV",
-        "Drama",
-        "Anime"
+        "🔥 Trending",
+        "🎬 Movies",
+        "📺 TV",
+        "🎭 Drama",
+        "🍥 Anime"
     )
 
     Row(
@@ -437,33 +655,33 @@ fun CategoryRow() {
                 rememberScrollState()
             )
             .padding(horizontal = 18.dp),
-        horizontalArrangement = Arrangement.spacedBy(9.dp)
+        horizontalArrangement =
+            Arrangement.spacedBy(9.dp)
     ) {
 
         categories.forEachIndexed { index, category ->
 
             Surface(
-                onClick = { },
                 shape = RoundedCornerShape(50),
-                color = if (index == 0) {
-                    StreamRed
-                } else {
-                    StreamCard
-                }
+                color =
+                    if (index == 0)
+                        StreamRed
+                    else
+                        StreamCard
             ) {
 
                 Text(
                     text = category,
                     color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = if (index == 0) {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Normal
-                    },
+                    fontSize = 12.sp,
+                    fontWeight =
+                        if (index == 0)
+                            FontWeight.Bold
+                        else
+                            FontWeight.Normal,
                     modifier = Modifier.padding(
-                        horizontal = 17.dp,
-                        vertical = 9.dp
+                        horizontal = 16.dp,
+                        vertical = 10.dp
                     )
                 )
             }
@@ -472,7 +690,7 @@ fun CategoryRow() {
 }
 
 @Composable
-fun StreamSection(
+fun SectionHeader(
     title: String,
     subtitle: String
 ) {
@@ -490,9 +708,7 @@ fun StreamSection(
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(
-            modifier = Modifier.height(3.dp)
-        )
+        Spacer(Modifier.height(3.dp))
 
         Text(
             text = subtitle,
@@ -503,74 +719,61 @@ fun StreamSection(
 }
 
 @Composable
-fun TmdbPosterRow(
-    items: List<TmdbItem>
+fun PosterRow(
+    items: List<TmdbItem>,
+    onItemClick: (TmdbItem) -> Unit
 ) {
 
-    val posterItems = items
+    val filtered = items
         .filter {
             !it.poster_path.isNullOrBlank()
         }
         .take(15)
 
-    if (posterItems.isEmpty()) {
-
-        Text(
-            text = "No titles available.",
-            color = StreamMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(
-                horizontal = 18.dp
-            )
-        )
-
-        return
-    }
-
     LazyRow(
         contentPadding = PaddingValues(
             horizontal = 18.dp
         ),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement =
+            Arrangement.spacedBy(12.dp)
     ) {
 
-        items(
-            items = posterItems
-        ) { item ->
+        items(filtered) { item ->
 
-            TmdbPosterCard(
-                item = item
+            PosterCard(
+                item = item,
+                onClick = {
+                    onItemClick(item)
+                }
             )
         }
     }
 }
 
 @Composable
-fun TmdbPosterCard(
-    item: TmdbItem
+fun PosterCard(
+    item: TmdbItem,
+    onClick: () -> Unit
 ) {
 
     Column(
         modifier = Modifier
-            .width(120.dp)
-            .clickable { }
+            .width(122.dp)
+            .clickable(onClick = onClick)
     ) {
 
         Box(
             modifier = Modifier
-                .width(120.dp)
-                .height(178.dp)
-                .clip(
-                    RoundedCornerShape(14.dp)
-                )
+                .width(122.dp)
+                .height(180.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .background(StreamCard)
         ) {
 
-            if (!item.poster_path.isNullOrBlank()) {
+            item.poster_path?.let {
 
                 AsyncImage(
-                    model = TMDB_POSTER_BASE_URL +
-                            item.poster_path,
+                    model = POSTER_URL + it,
                     contentDescription =
                         item.title ?: item.name,
                     modifier = Modifier.fillMaxSize(),
@@ -578,38 +781,32 @@ fun TmdbPosterCard(
                 )
             }
 
-            if ((item.vote_average ?: 0.0) > 0.0) {
+            if ((item.vote_average ?: 0.0) > 0) {
 
-                Box(
+                Text(
+                    text = String.format(
+                        "%.1f",
+                        item.vote_average
+                    ),
+                    color = StreamGold,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(7.dp)
                         .background(
-                            Color(0xCC080808),
-                            RoundedCornerShape(8.dp)
+                            Color(0xDD111111),
+                            RoundedCornerShape(7.dp)
                         )
                         .padding(
                             horizontal = 7.dp,
                             vertical = 4.dp
                         )
-                ) {
-
-                    Text(
-                        text = String.format(
-                            "%.1f",
-                            item.vote_average
-                        ),
-                        color = StreamGold,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                )
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(7.dp)
-        )
+        Spacer(Modifier.height(7.dp))
 
         Text(
             text = item.title
@@ -617,145 +814,784 @@ fun TmdbPosterCard(
                 ?: "Untitled",
             color = StreamText,
             fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
             maxLines = 2
         )
     }
 }
 
 @Composable
-fun LoadingSection() {
+fun SearchScreen(
+    onBack: () -> Unit,
+    onItemClick: (TmdbItem) -> Unit
+) {
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(250.dp),
-        contentAlignment = Alignment.Center
+    var query by remember {
+        mutableStateOf("")
+    }
+
+    var results by remember {
+        mutableStateOf<List<TmdbItem>>(emptyList())
+    }
+
+    var loading by remember {
+        mutableStateOf(false)
+    }
+
+    var searched by remember {
+        mutableStateOf(false)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
     ) {
 
-        Column(
-            horizontalAlignment =
-                Alignment.CenterHorizontally
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 12.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically
         ) {
 
-            CircularProgressIndicator(
-                color = StreamRed
-            )
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
+            IconButton(
+                onClick = onBack
+            ) {
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
 
             Text(
-                text = "Loading TMDB...",
+                text = "Search",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                query = it
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp),
+            singleLine = true,
+            placeholder = {
+                Text(
+                    "Search movies, series, anime..."
+                )
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null
+                )
+            },
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search
+            ),
+            keyboardActions = KeyboardActions(
+                onSearch = {
+                    searched = true
+                }
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = StreamRed,
+                unfocusedBorderColor = StreamCard,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedLeadingIconColor = StreamRed,
+                unfocusedLeadingIconColor = StreamMuted
+            )
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                searched = true
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = StreamRed
+            )
+        ) {
+            Text("Search")
+        }
+
+        if (searched) {
+
+            LaunchedEffect(query) {
+
+                if (query.isBlank()) {
+                    results = emptyList()
+                    return@LaunchedEffect
+                }
+
+                loading = true
+
+                try {
+                    results =
+                        TmdbRepository().search(query)
+                } finally {
+                    loading = false
+                }
+            }
+        }
+
+        Spacer(Modifier.height(15.dp))
+
+        when {
+
+            loading -> {
+                LoadingView()
+            }
+
+            searched && results.isEmpty() -> {
+
+                Text(
+                    text = "No results found.",
+                    color = StreamMuted,
+                    modifier = Modifier.padding(
+                        horizontal = 18.dp
+                    )
+                )
+            }
+
+            else -> {
+
+                LazyColumn(
+                    contentPadding =
+                        PaddingValues(
+                            horizontal = 18.dp,
+                            vertical = 8.dp
+                        ),
+                    verticalArrangement =
+                        Arrangement.spacedBy(12.dp)
+                ) {
+
+                    items(results) { item ->
+
+                        SearchResultCard(
+                            item = item,
+                            onClick = {
+                                onItemClick(item)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchResultCard(
+    item: TmdbItem,
+    onClick: () -> Unit
+) {
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(StreamCard)
+            .clickable(onClick = onClick)
+            .padding(9.dp)
+    ) {
+
+        AsyncImage(
+            model = POSTER_URL +
+                    (item.poster_path ?: ""),
+            contentDescription =
+                item.title ?: item.name,
+            modifier = Modifier
+                .width(75.dp)
+                .height(105.dp)
+                .clip(RoundedCornerShape(9.dp)),
+            contentScale = ContentScale.Crop
+        )
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 5.dp)
+        ) {
+
+            Text(
+                text = item.title
+                    ?: item.name
+                    ?: "Untitled",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            Text(
+                text =
+                    if (item.media_type == "tv")
+                        "TV Series"
+                    else
+                        "Movie",
+                color = StreamRed,
+                fontSize = 11.sp
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            Text(
+                text = item.overview
+                    ?: "No description available.",
                 color = StreamMuted,
-                fontSize = 13.sp
+                fontSize = 11.sp,
+                maxLines = 4
             )
         }
     }
 }
 
 @Composable
-fun ErrorSection(
-    message: String
+fun DetailScreen(
+    item: TmdbItem,
+    isInMyList: Boolean,
+    onBack: () -> Unit,
+    onAddToList: () -> Unit,
+    onDownload: () -> Unit,
+    onSimilarClick: (TmdbItem) -> Unit
 ) {
 
-    Box(
+    var details by remember {
+        mutableStateOf(item)
+    }
+
+    var similar by remember {
+        mutableStateOf<List<TmdbItem>>(emptyList())
+    }
+
+    LaunchedEffect(item.id, item.media_type) {
+
+        try {
+
+            val repository = TmdbRepository()
+
+            details =
+                repository.getDetails(item)
+
+            similar =
+                repository.getSimilar(item)
+                    .take(10)
+
+        } catch (_: Exception) {
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 35.dp)
+    ) {
+
+        item {
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(310.dp)
+            ) {
+
+                details.backdrop_path?.let {
+
+                    AsyncImage(
+                        model = BACKDROP_URL + it,
+                        contentDescription =
+                            details.title ?: details.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    StreamBlack
+                                )
+                            )
+                        )
+                )
+
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .align(Alignment.TopStart)
+                ) {
+
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+
+        item {
+
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = 18.dp
+                )
+            ) {
+
+                Text(
+                    text = details.title
+                        ?: details.name
+                        ?: "Untitled",
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text =
+                        if (details.media_type == "tv")
+                            "TV Series"
+                        else
+                            "Movie",
+                    color = StreamRed,
+                    fontSize = 12.sp
+                )
+
+                Spacer(Modifier.height(15.dp))
+
+                Row(
+                    horizontalArrangement =
+                        Arrangement.spacedBy(10.dp)
+                ) {
+
+                    Button(
+                        onClick = {
+                            // Playback source will be connected here.
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = StreamRed
+                        )
+                    ) {
+
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null
+                        )
+
+                        Spacer(Modifier.width(5.dp))
+
+                        Text("Play")
+                    }
+
+                    Button(
+                        onClick = onAddToList,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = StreamCard
+                        )
+                    ) {
+
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = null,
+                            tint =
+                                if (isInMyList)
+                                    StreamGold
+                                else
+                                    Color.White
+                        )
+
+                        Spacer(Modifier.width(5.dp))
+
+                        Text(
+                            if (isInMyList)
+                                "Saved"
+                            else
+                                "My List"
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    horizontalArrangement =
+                        Arrangement.spacedBy(10.dp)
+                ) {
+
+                    Button(
+                        onClick = onDownload,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = StreamCard
+                        )
+                    ) {
+
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = null
+                        )
+
+                        Spacer(Modifier.width(5.dp))
+
+                        Text("Download")
+                    }
+
+                    Button(
+                        onClick = { },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = StreamCard
+                        )
+                    ) {
+
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = null
+                        )
+
+                        Spacer(Modifier.width(5.dp))
+
+                        Text("Share")
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = "About",
+                    color = Color.White,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = details.overview
+                        ?: "No description available.",
+                    color = StreamMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp
+                )
+
+                Spacer(Modifier.height(25.dp))
+            }
+        }
+
+        if (similar.isNotEmpty()) {
+
+            item {
+
+                Text(
+                    text = "Similar",
+                    color = Color.White,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(
+                        horizontal = 18.dp
+                    )
+                )
+
+                Spacer(Modifier.height(12.dp))
+            }
+
+            item {
+
+                PosterRow(
+                    items = similar,
+                    onItemClick = onSimilarClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CollectionScreen(
+    title: String,
+    items: List<TmdbItem>,
+    emptyText: String,
+    onBack: () -> Unit,
+    onItemClick: (TmdbItem) -> Unit
+) {
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 12.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            IconButton(
+                onClick = onBack
+            ) {
+
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
+
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (items.isEmpty()) {
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+
+                Text(
+                    text = emptyText,
+                    color = StreamMuted,
+                    fontSize = 13.sp
+                )
+            }
+
+        } else {
+
+            LazyColumn(
+                contentPadding =
+                    PaddingValues(18.dp),
+                verticalArrangement =
+                    Arrangement.spacedBy(15.dp)
+            ) {
+
+                items(items.chunked(2)) { rowItems ->
+
+                    Row(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(15.dp)
+                    ) {
+
+                        rowItems.forEach { item ->
+
+                            PosterCard(
+                                item = item,
+                                onClick = {
+                                    onItemClick(item)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsScreen(
+    onBack: () -> Unit
+) {
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 12.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            IconButton(
+                onClick = onBack
+            ) {
+
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
+
+            Text(
+                text = "Settings",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        SettingRow(
+            title = "Account",
+            subtitle = "Login and subscription"
+        )
+
+        SettingRow(
+            title = "Playback",
+            subtitle = "Quality and player settings"
+        )
+
+        SettingRow(
+            title = "Downloads",
+            subtitle = "Manage downloaded content"
+        )
+
+        SettingRow(
+            title = "Notifications",
+            subtitle = "Streamify notifications"
+        )
+
+        SettingRow(
+            title = "About Streamify",
+            subtitle = "App information and TMDB attribution"
+        )
+    }
+}
+
+@Composable
+fun SettingRow(
+    title: String,
+    subtitle: String
+) {
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
-            .padding(horizontal = 18.dp)
-            .background(
-                StreamCard,
-                RoundedCornerShape(18.dp)
+            .clickable { }
+            .padding(
+                horizontal = 20.dp,
+                vertical = 18.dp
             ),
-        contentAlignment = Alignment.Center
+        verticalAlignment = Alignment.CenterVertically
     ) {
 
         Column(
-            horizontalAlignment =
-                Alignment.CenterHorizontally,
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.weight(1f)
         ) {
 
             Text(
-                text = "TMDB connection issue",
-                color = StreamRed,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
+                text = title,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
             )
 
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
+            Spacer(Modifier.height(4.dp))
 
             Text(
-                text = message,
+                text = subtitle,
                 color = StreamMuted,
-                fontSize = 12.sp
+                fontSize = 11.sp
             )
         }
+
+        Icon(
+            Icons.Default.Settings,
+            contentDescription = null,
+            tint = StreamMuted,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
 @Composable
 fun BottomNavigation(
-    modifier: Modifier = Modifier
+    onHome: () -> Unit,
+    onMyList: () -> Unit,
+    onDownloads: () -> Unit,
+    onSettings: () -> Unit
 ) {
 
     Surface(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(
                 horizontal = 18.dp,
-                vertical = 12.dp
+                vertical = 10.dp
             ),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(25.dp),
         color = Color(0xEE191919)
     ) {
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 9.dp),
             horizontalArrangement =
-                Arrangement.SpaceEvenly,
-            verticalAlignment =
-                Alignment.CenterVertically
+                Arrangement.SpaceEvenly
         ) {
 
-            BottomItem(
+            NavItem(
                 icon = Icons.Default.Home,
                 label = "Home",
+                onClick = onHome,
                 selected = true
             )
 
-            BottomItem(
+            NavItem(
                 icon = Icons.Default.Star,
-                label = "My List"
+                label = "My List",
+                onClick = onMyList
             )
 
-            BottomItem(
-                icon = Icons.Default.Star,
-                label = "Downloads"
+            NavItem(
+                icon = Icons.Default.Download,
+                label = "Downloads",
+                onClick = onDownloads
             )
 
-            BottomItem(
+            NavItem(
                 icon = Icons.Default.Settings,
-                label = "Settings"
+                label = "Settings",
+                onClick = onSettings
             )
         }
     }
 }
 
 @Composable
-fun BottomItem(
+fun NavItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    onClick: () -> Unit,
     selected: Boolean = false
 ) {
 
     Column(
+        modifier = Modifier.clickable(
+            onClick = onClick
+        ),
         horizontalAlignment =
             Alignment.CenterHorizontally
     ) {
@@ -763,26 +1599,60 @@ fun BottomItem(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (selected) {
-                StreamRed
-            } else {
-                StreamMuted
-            },
-            modifier = Modifier.size(21.dp)
+            tint =
+                if (selected)
+                    StreamRed
+                else
+                    StreamMuted,
+            modifier = Modifier.size(22.dp)
         )
 
-        Spacer(
-            modifier = Modifier.height(3.dp)
-        )
+        Spacer(Modifier.height(3.dp))
 
         Text(
             text = label,
-            color = if (selected) {
-                Color.White
-            } else {
-                StreamMuted
-            },
+            color =
+                if (selected)
+                    Color.White
+                else
+                    StreamMuted,
             fontSize = 9.sp
+        )
+    }
+}
+
+@Composable
+fun LoadingView() {
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        contentAlignment = Alignment.Center
+    ) {
+
+        CircularProgressIndicator(
+            color = StreamRed
+        )
+    }
+}
+
+@Composable
+fun ErrorView(
+    message: String
+) {
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        contentAlignment = Alignment.Center
+    ) {
+
+        Text(
+            text = message,
+            color = StreamMuted,
+            fontSize = 12.sp
         )
     }
 }
