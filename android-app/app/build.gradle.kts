@@ -38,17 +38,41 @@ android {
 }
 
 dependencies {
+
     implementation("androidx.core:core-ktx:1.15.0")
+
     implementation("androidx.activity:activity-compose:1.10.1")
 
-    implementation(platform("androidx.compose:compose-bom:2025.01.00"))
+    implementation(
+        platform(
+            "androidx.compose:compose-bom:2025.01.00"
+        )
+    )
+
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    implementation("com.squareup.retrofit2:retrofit:2.11.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    // Material icons used by Streamify UI
+    implementation(
+        "androidx.compose.material:material-icons-core"
+    )
 
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    // TMDB networking
+    implementation(
+        "com.squareup.retrofit2:retrofit:2.11.0"
+    )
+
+    implementation(
+        "com.squareup.retrofit2:converter-gson:2.11.0"
+    )
+
+    // TMDB poster/backdrop images
+    implementation(
+        "io.coil-kt:coil-compose:2.7.0"
+    )
+
+    debugImplementation(
+        "androidx.compose.ui:ui-tooling"
+    )
 }
