@@ -44,11 +44,15 @@ private val DeepRed = Color(0xFF8A0A0A)
 private val Gold = Color(0xFFFFD166)
 private val White = Color(0xFFF8F8F8)
 private val Grey = Color(0xFF9A9A9A)
-private val RedBrush = Brush.linearGradient(listOf(Red, DeepRed))
+
+private val RedBrush =
+    Brush.linearGradient(listOf(Red, DeepRed))
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             StreamifyApp()
         }
@@ -56,21 +60,43 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Screen {
-    HOME, SEARCH, DETAIL, MY_LIST, DOWNLOADS, SETTINGS
+    HOME,
+    SEARCH,
+    DETAIL,
+    MY_LIST,
+    DOWNLOADS,
+    SETTINGS
 }
 
 private enum class HomeCategory(
     val label: String,
     val icon: ImageVector
 ) {
-    TRENDING("Trending", Icons.Outlined.LocalFireDepartment),
-    MOVIES("Movies", Icons.Outlined.Movie),
-    TV("TV", Icons.Outlined.Tv),
-    DRAMA("Drama", Icons.Outlined.TheaterComedy),
-    ANIME("Anime", Icons.Outlined.Face)
+    TRENDING(
+        "Trending",
+        Icons.Outlined.LocalFireDepartment
+    ),
+    MOVIES(
+        "Movies",
+        Icons.Outlined.Movie
+    ),
+    TV(
+        "TV",
+        Icons.Outlined.Tv
+    ),
+    DRAMA(
+        "Drama",
+        Icons.Outlined.TheaterComedy
+    ),
+    ANIME(
+        "Anime",
+        Icons.Outlined.Face
+    )
 }
 
-private enum class SubCategory(val label: String) {
+private enum class SubCategory(
+    val label: String
+) {
     ALL("All"),
     HOLLYWOOD("Hollywood"),
     BOLLYWOOD("Bollywood"),
@@ -93,8 +119,13 @@ private data class ContentRow(
     val items: List<TmdbItem>
 )
 
-private fun subcategories(category: HomeCategory): List<SubCategory> = when (category) {
-    HomeCategory.TRENDING -> listOf(SubCategory.ALL)
+private fun subcategories(
+    category: HomeCategory
+): List<SubCategory> = when (category) {
+
+    HomeCategory.TRENDING -> listOf(
+        SubCategory.ALL
+    )
 
     HomeCategory.MOVIES -> listOf(
         SubCategory.ALL,
@@ -132,56 +163,133 @@ private suspend fun loadContent(
     category: HomeCategory,
     subcategory: SubCategory
 ): List<TmdbItem> {
+
     return when (category) {
-        HomeCategory.TRENDING -> repo.getTrending()
 
-        HomeCategory.MOVIES -> when (subcategory) {
-            SubCategory.HOLLYWOOD -> repo.getHollywoodMovies()
-            SubCategory.BOLLYWOOD -> repo.getBollywoodMovies()
-            SubCategory.SOUTH -> repo.getSouthMovies()
-            SubCategory.MULTI_AUDIO,
-            SubCategory.HINDI_DUBBED -> emptyList()
-            else -> repo.getMovies()
+        HomeCategory.TRENDING -> {
+            repo.getTrending()
         }
 
-        HomeCategory.TV -> when (subcategory) {
-            SubCategory.BOLLYWOOD_SERIES -> repo.getBollywoodSeries()
-            SubCategory.TV_SHOWS -> repo.getEnglishTvShows()
-            else -> repo.getTvShows()
+        HomeCategory.MOVIES -> {
+            when (subcategory) {
+
+                SubCategory.HOLLYWOOD -> {
+                    repo.getHollywoodMovies()
+                }
+
+                SubCategory.BOLLYWOOD -> {
+                    repo.getBollywoodMovies()
+                }
+
+                SubCategory.SOUTH -> {
+                    repo.getSouthMovies()
+                }
+
+                SubCategory.MULTI_AUDIO,
+                SubCategory.HINDI_DUBBED -> {
+                    emptyList()
+                }
+
+                else -> {
+                    repo.getMovies()
+                }
+            }
         }
 
-        HomeCategory.DRAMA -> when (subcategory) {
-            SubCategory.KDRAMA -> repo.getKDrama()
-            SubCategory.TURKISH -> repo.getTurkishDrama()
-            SubCategory.PAKISTANI -> repo.getPakistaniDrama()
-            else -> repo.getDrama()
+        HomeCategory.TV -> {
+            when (subcategory) {
+
+                SubCategory.BOLLYWOOD_SERIES -> {
+                    repo.getBollywoodSeries()
+                }
+
+                SubCategory.TV_SHOWS -> {
+                    repo.getEnglishTvShows()
+                }
+
+                else -> {
+                    repo.getTvShows()
+                }
+            }
         }
 
-        HomeCategory.ANIME -> when (subcategory) {
-            SubCategory.ANIMATED -> repo.getAnimatedContent()
-            SubCategory.CARTOON -> repo.getCartoonShows()
-            else -> repo.getAnime()
+        HomeCategory.DRAMA -> {
+            when (subcategory) {
+
+                SubCategory.KDRAMA -> {
+                    repo.getKDrama()
+                }
+
+                SubCategory.TURKISH -> {
+                    repo.getTurkishDrama()
+                }
+
+                SubCategory.PAKISTANI -> {
+                    repo.getPakistaniDrama()
+                }
+
+                else -> {
+                    repo.getDrama()
+                }
+            }
+        }
+
+        HomeCategory.ANIME -> {
+            when (subcategory) {
+
+                SubCategory.ANIMATED -> {
+                    repo.getAnimatedContent()
+                }
+
+                SubCategory.CARTOON -> {
+                    repo.getCartoonShows()
+                }
+
+                else -> {
+                    repo.getAnime()
+                }
+            }
         }
     }
 }
 
-private fun TmdbItem.sameAs(other: TmdbItem): Boolean {
-    return id == other.id && media_type == other.media_type
+private fun TmdbItem.sameAs(
+    other: TmdbItem
+): Boolean {
+    return id == other.id &&
+            media_type == other.media_type
 }
 
-private fun List<TmdbItem>.containsSame(item: TmdbItem): Boolean {
-    return any { it.sameAs(item) }
+private fun List<TmdbItem>.containsSame(
+    item: TmdbItem
+): Boolean {
+    return any {
+        it.sameAs(item)
+    }
 }
 
-private fun uniqueItems(items: List<TmdbItem>): List<TmdbItem> {
-    return items.distinctBy { "${it.media_type ?: ""}-${it.id}" }
+private fun uniqueItems(
+    items: List<TmdbItem>
+): List<TmdbItem> {
+    return items.distinctBy {
+        "${it.media_type ?: ""}-${it.id}"
+    }
 }
 
 @Composable
 private fun StreamifyApp() {
-    var screen by remember { mutableStateOf(Screen.HOME) }
-    var category by remember { mutableStateOf(HomeCategory.TRENDING) }
-    var selected by remember { mutableStateOf<TmdbItem?>(null) }
+
+    var screen by remember {
+        mutableStateOf(Screen.HOME)
+    }
+
+    var category by remember {
+        mutableStateOf(HomeCategory.TRENDING)
+    }
+
+    var selected by remember {
+        mutableStateOf<TmdbItem?>(null)
+    }
 
     var myList by remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
@@ -191,7 +299,9 @@ private fun StreamifyApp() {
         mutableStateOf<List<TmdbItem>>(emptyList())
     }
 
-    BackHandler(enabled = screen != Screen.HOME) {
+    BackHandler(
+        enabled = screen != Screen.HOME
+    ) {
         screen = Screen.HOME
     }
 
@@ -205,41 +315,62 @@ private fun StreamifyApp() {
             .fillMaxSize()
             .background(Black)
     ) {
+
         when (screen) {
+
             Screen.HOME -> {
                 HomeScreen(
                     category = category,
-                    onCategory = { category = it },
-                    onSearch = { screen = Screen.SEARCH },
+                    onCategory = {
+                        category = it
+                    },
+                    onSearch = {
+                        screen = Screen.SEARCH
+                    },
                     onOpen = open,
-                    onMyList = { screen = Screen.MY_LIST },
-                    onDownloads = { screen = Screen.DOWNLOADS },
-                    onSettings = { screen = Screen.SETTINGS }
+                    onMyList = {
+                        screen = Screen.MY_LIST
+                    },
+                    onDownloads = {
+                        screen = Screen.DOWNLOADS
+                    },
+                    onSettings = {
+                        screen = Screen.SETTINGS
+                    }
                 )
             }
 
             Screen.SEARCH -> {
                 SearchScreen(
-                    onBack = { screen = Screen.HOME },
+                    onBack = {
+                        screen = Screen.HOME
+                    },
                     onOpen = open
                 )
             }
 
             Screen.DETAIL -> {
                 selected?.let { item ->
+
                     DetailScreen(
                         item = item,
                         inList = myList.containsSame(item),
-                        onBack = { screen = Screen.HOME },
+                        onBack = {
+                            screen = Screen.HOME
+                        },
                         onToggleList = {
+
                             myList =
                                 if (myList.containsSame(item)) {
-                                    myList.filterNot { it.sameAs(item) }
+                                    myList.filterNot {
+                                        it.sameAs(item)
+                                    }
                                 } else {
                                     myList + item
                                 }
                         },
                         onDownload = {
+
                             if (!downloads.containsSame(item)) {
                                 downloads = downloads + item
                             }
@@ -256,7 +387,9 @@ private fun StreamifyApp() {
                     title = "My List",
                     items = myList,
                     emptyText = "Your watchlist is empty.",
-                    onBack = { screen = Screen.HOME },
+                    onBack = {
+                        screen = Screen.HOME
+                    },
                     onOpen = open
                 )
             }
@@ -266,7 +399,9 @@ private fun StreamifyApp() {
                     title = "Downloads",
                     items = downloads,
                     emptyText = "No downloads yet.",
-                    onBack = { screen = Screen.HOME },
+                    onBack = {
+                        screen = Screen.HOME
+                    },
                     onOpen = open
                 )
             }
@@ -290,7 +425,10 @@ private fun HomeScreen(
     onDownloads: () -> Unit,
     onSettings: () -> Unit
 ) {
-    val repo = remember { TmdbRepository() }
+
+    val repo = remember {
+        TmdbRepository()
+    }
 
     var hero by remember {
         mutableStateOf<List<TmdbItem>>(emptyList())
@@ -301,84 +439,127 @@ private fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
+
         hero = try {
-            uniqueItems(repo.getTrending()).take(5)
+            uniqueItems(
+                repo.getTrending()
+            ).take(5)
         } catch (_: Exception) {
             emptyList()
         }
     }
 
     LaunchedEffect(hero, heroIndex) {
+
         if (hero.size > 1) {
             delay(3000)
-            heroIndex = (heroIndex + 1) % hero.size
+
+            heroIndex =
+                (heroIndex + 1) % hero.size
         }
     }
 
-    val sections = if (category == HomeCategory.TRENDING) {
-        listOf(
-            HomeCategory.TRENDING,
-            HomeCategory.MOVIES,
-            HomeCategory.TV,
-            HomeCategory.DRAMA,
-            HomeCategory.ANIME
-        )
-    } else {
-        listOf(category)
-    }
+    val sections =
+        if (category == HomeCategory.TRENDING) {
+
+            listOf(
+                HomeCategory.TRENDING,
+                HomeCategory.MOVIES,
+                HomeCategory.TV,
+                HomeCategory.DRAMA,
+                HomeCategory.ANIME
+            )
+
+        } else {
+
+            listOf(category)
+        }
 
     Column(
         Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .windowInsetsPadding(WindowInsets.navigationBars)
+            .windowInsetsPadding(
+                WindowInsets.statusBars
+            )
+            .windowInsetsPadding(
+                WindowInsets.navigationBars
+            )
     ) {
+
         LazyColumn(
             Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = PaddingValues(bottom = 18.dp)
+            contentPadding = PaddingValues(
+                bottom = 18.dp
+            )
         ) {
+
             item {
                 TopBar(onSearch)
             }
 
             item {
+
                 if (hero.isEmpty()) {
+
                     Box(
                         Modifier
                             .fillMaxWidth()
                             .height(200.dp)
-                            .padding(horizontal = 14.dp)
-                            .clip(RoundedCornerShape(18.dp))
+                            .padding(
+                                horizontal = 14.dp
+                            )
+                            .clip(
+                                RoundedCornerShape(18.dp)
+                            )
                             .background(Surface),
                         contentAlignment = Alignment.Center
                     ) {
+
                         CircularProgressIndicator(
                             color = Red,
                             strokeWidth = 3.dp
                         )
                     }
+
                 } else {
+
                     Hero(
-                        item = hero[heroIndex.coerceIn(0, hero.lastIndex)],
+                        item = hero[
+                            heroIndex.coerceIn(
+                                0,
+                                hero.lastIndex
+                            )
+                        ],
                         dots = hero.size,
                         activeDot = heroIndex,
                         onOpen = onOpen,
                         onPrev = {
+
                             heroIndex =
-                                (heroIndex - 1 + hero.size) % hero.size
+                                (
+                                    heroIndex -
+                                            1 +
+                                            hero.size
+                                    ) % hero.size
                         },
                         onNext = {
+
                             heroIndex =
-                                (heroIndex + 1) % hero.size
+                                (
+                                    heroIndex + 1
+                                    ) % hero.size
                         }
                     )
                 }
             }
 
             item {
-                Spacer(Modifier.height(14.dp))
+
+                Spacer(
+                    Modifier.height(14.dp)
+                )
 
                 CategoryPills(
                     selected = category,
@@ -387,7 +568,11 @@ private fun HomeScreen(
             }
 
             sections.forEach { currentCategory ->
-                item(key = "category-${currentCategory.name}") {
+
+                item(
+                    key = "category-${currentCategory.name}"
+                ) {
+
                     CategorySection(
                         category = currentCategory,
                         onOpen = onOpen
@@ -411,45 +596,65 @@ private fun CategorySection(
     category: HomeCategory,
     onOpen: (TmdbItem) -> Unit
 ) {
-    val repo = remember { TmdbRepository() }
 
-    var subcategory by remember(category) {
-        mutableStateOf(SubCategory.ALL)
+    val repo = remember {
+        TmdbRepository()
     }
 
-    var rows by remember(category) {
-        mutableStateOf<List<ContentRow>>(emptyList())
+    var subcategory by remember(category) {
+        mutableStateOf(
+            SubCategory.ALL
+        )
+    }
+
+    var content by remember(category) {
+        mutableStateOf<List<TmdbItem>>(
+            emptyList()
+        )
     }
 
     var loading by remember(category) {
         mutableStateOf(true)
     }
 
-    LaunchedEffect(category, subcategory) {
+    LaunchedEffect(
+        category,
+        subcategory
+    ) {
+
         loading = true
 
-        rows = try {
-            buildContentRows(
-                repo = repo,
-                category = category,
-                subcategory = subcategory
-            )
-        } catch (_: Exception) {
-            emptyList()
-        }
+        content =
+            try {
+                uniqueItems(
+                    loadContent(
+                        repo = repo,
+                        category = category,
+                        subcategory = subcategory
+                    )
+                )
+            } catch (_: Exception) {
+                emptyList()
+            }
 
         loading = false
     }
 
     Column(
-        Modifier.padding(top = 20.dp)
+        Modifier.padding(
+            top = 20.dp
+        )
     ) {
+
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(
+                    horizontal = 16.dp
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
+
             Icon(
                 category.icon,
                 contentDescription = null,
@@ -457,7 +662,9 @@ private fun CategorySection(
                 modifier = Modifier.size(25.dp)
             )
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(
+                Modifier.width(8.dp)
+            )
 
             Text(
                 category.label,
@@ -467,24 +674,33 @@ private fun CategorySection(
             )
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(
+            Modifier.height(10.dp)
+        )
 
         SubPills(
             options = subcategories(category),
             selected = subcategory,
-            onSelect = { subcategory = it }
+            onSelect = {
+                subcategory = it
+            }
         )
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(
+            Modifier.height(8.dp)
+        )
 
         when {
+
             loading -> {
+
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(150.dp),
                     contentAlignment = Alignment.Center
                 ) {
+
                     CircularProgressIndicator(
                         color = Red,
                         strokeWidth = 2.dp,
@@ -495,6 +711,7 @@ private fun CategorySection(
 
             subcategory == SubCategory.MULTI_AUDIO ||
                     subcategory == SubCategory.HINDI_DUBBED -> {
+
                 Text(
                     "Connect your playback source metadata to show ${subcategory.label} titles.",
                     color = Grey,
@@ -506,7 +723,8 @@ private fun CategorySection(
                 )
             }
 
-            rows.isEmpty() -> {
+            content.isEmpty() -> {
+
                 Text(
                     "No content available.",
                     color = Grey,
@@ -519,342 +737,85 @@ private fun CategorySection(
             }
 
             else -> {
-                rows.forEach { row ->
-                    if (row.items.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
 
-                        SectionTitle(row.title)
+                val chunks =
+                    content
+                        .take(36)
+                        .chunked(12)
 
-                        Spacer(Modifier.height(8.dp))
+                chunks.forEachIndexed { index, chunk ->
 
-                        PosterRow(
-                            items = row.items,
-                            onOpen = onOpen
+                    Spacer(
+                        Modifier.height(
+                            if (index == 0) {
+                                4.dp
+                            } else {
+                                18.dp
+                            }
                         )
-                    }
-                }
-            }
-        }
-    }
-}
+                    )
 
-private suspend fun buildContentRows(
-    repo: TmdbRepository,
-    category: HomeCategory,
-    subcategory: SubCategory
-): List<ContentRow> {
+                    SectionTitle(
+                        when {
+                            category == HomeCategory.TRENDING ->
+                                "Trending Now"
 
-    suspend fun movieRow(
-        title: String,
-        genre: Int,
-        language: String? = null
-    ): ContentRow {
-        return ContentRow(
-            title,
-            uniqueItems(
-                repo.getMovieGenre(
-                    genreId = genre,
-                    language = language
-                )
-            ).take(12)
-        )
-    }
+                            index == 0 ->
+                                "${subcategory.label} Popular"
 
-    suspend fun tvRow(
-        title: String,
-        genre: Int,
-        language: String? = null
-    ): ContentRow {
-        return ContentRow(
-            title,
-            uniqueItems(
-                repo.getTvGenre(
-                    genreId = genre,
-                    language = language
-                )
-            ).take(12)
-        )
-    }
+                            index == 1 ->
+                                "More ${subcategory.label}"
 
-    return when (category) {
+                            else ->
+                                "More Picks"
+                        }
+                    )
 
-        HomeCategory.TRENDING -> {
-            listOf(
-                ContentRow(
-                    "Trending Now",
-                    uniqueItems(repo.getTrending()).take(12)
-                )
-            )
-        }
+                    Spacer(
+                        Modifier.height(8.dp)
+                    )
 
-        HomeCategory.MOVIES -> {
-            when (subcategory) {
-
-                SubCategory.HOLLYWOOD -> {
-                    listOf(
-                        ContentRow(
-                            "Hollywood Popular",
-                            uniqueItems(repo.getHollywoodMovies()).take(12)
-                        ),
-                        movieRow("Action", 28, "en"),
-                        movieRow("Comedy", 35, "en"),
-                        movieRow("Horror", 27, "en"),
-                        movieRow("Sci-Fi", 878, "en"),
-                        movieRow("Thriller", 53, "en"),
-                        movieRow("Romance", 10749, "en")
+                    PosterRow(
+                        items = chunk,
+                        onOpen = onOpen
                     )
                 }
-
-                SubCategory.BOLLYWOOD -> {
-                    listOf(
-                        ContentRow(
-                            "Bollywood Popular",
-                            uniqueItems(repo.getBollywoodMovies()).take(12)
-                        ),
-                        movieRow("Action", 28, "hi"),
-                        movieRow("Comedy", 35, "hi"),
-                        movieRow("Drama", 18, "hi"),
-                        movieRow("Romance", 10749, "hi"),
-                        movieRow("Thriller", 53, "hi")
-                    )
-                }
-
-                SubCategory.SOUTH -> {
-                    listOf(
-                        ContentRow(
-                            "South Cinema Popular",
-                            uniqueItems(repo.getSouthMovies()).take(12)
-                        ),
-                        movieRow("Action", 28, "ta"),
-                        movieRow("Drama", 18, "ta"),
-                        movieRow("Comedy", 35, "ta"),
-                        movieRow("Romance", 10749, "ta"),
-                        movieRow("Thriller", 53, "te")
-                    )
-                }
-
-                SubCategory.ALL -> {
-                    listOf(
-                        ContentRow(
-                            "Popular Movies",
-                            uniqueItems(repo.getMovies()).take(12)
-                        ),
-                        movieRow("Action", 28),
-                        movieRow("Comedy", 35),
-                        movieRow("Drama", 18),
-                        movieRow("Horror", 27),
-                        movieRow("Romance", 10749),
-                        movieRow("Sci-Fi", 878)
-                    )
-                }
-
-                SubCategory.MULTI_AUDIO,
-                SubCategory.HINDI_DUBBED -> emptyList()
-            }
-        }
-
-        HomeCategory.TV -> {
-            when (subcategory) {
-
-                SubCategory.BOLLYWOOD_SERIES -> {
-                    listOf(
-                        ContentRow(
-                            "Hindi Series Popular",
-                            uniqueItems(repo.getBollywoodSeries()).take(12)
-                        ),
-                        tvRow("Drama", 18, "hi"),
-                        tvRow("Comedy", 35, "hi"),
-                        tvRow("Crime", 80, "hi"),
-                        tvRow("Action & Adventure", 10759, "hi"),
-                        tvRow("Mystery", 9648, "hi")
-                    )
-                }
-
-                SubCategory.TV_SHOWS -> {
-                    listOf(
-                        ContentRow(
-                            "Popular TV Shows",
-                            uniqueItems(repo.getEnglishTvShows()).take(12)
-                        ),
-                        tvRow("Drama", 18, "en"),
-                        tvRow("Comedy", 35, "en"),
-                        tvRow("Crime", 80, "en"),
-                        tvRow("Action & Adventure", 10759, "en"),
-                        tvRow("Sci-Fi & Fantasy", 10765, "en")
-                    )
-                }
-
-                SubCategory.WEB_SERIES -> {
-                    listOf(
-                        ContentRow(
-                            "Popular Web Series",
-                            uniqueItems(repo.getTvShows()).take(12)
-                        ),
-                        tvRow("Drama", 18),
-                        tvRow("Comedy", 35),
-                        tvRow("Crime", 80),
-                        tvRow("Action & Adventure", 10759),
-                        tvRow("Sci-Fi & Fantasy", 10765),
-                        tvRow("Mystery", 9648)
-                    )
-                }
-
-                SubCategory.ALL -> {
-                    listOf(
-                        ContentRow(
-                            "Popular TV",
-                            uniqueItems(repo.getTvShows()).take(12)
-                        ),
-                        tvRow("Drama", 18),
-                        tvRow("Comedy", 35),
-                        tvRow("Crime", 80),
-                        tvRow("Action & Adventure", 10759),
-                        tvRow("Sci-Fi & Fantasy", 10765)
-                    )
-                }
-
-                else -> emptyList()
-            }
-        }
-
-        HomeCategory.DRAMA -> {
-            when (subcategory) {
-
-                SubCategory.KDRAMA -> {
-                    listOf(
-                        ContentRow(
-                            "K-Drama Popular",
-                            uniqueItems(repo.getKDrama()).take(12)
-                        ),
-                        tvRow("Romance", 10749, "ko"),
-                        tvRow("Crime", 80, "ko"),
-                        tvRow("Mystery", 9648, "ko"),
-                        tvRow("Comedy", 35, "ko")
-                    )
-                }
-
-                SubCategory.TURKISH -> {
-                    listOf(
-                        ContentRow(
-                            "Turkish Drama Popular",
-                            uniqueItems(repo.getTurkishDrama()).take(12)
-                        ),
-                        tvRow("Romance", 10749, "tr"),
-                        tvRow("Crime", 80, "tr"),
-                        tvRow("Action & Adventure", 10759, "tr"),
-                        tvRow("Comedy", 35, "tr")
-                    )
-                }
-
-                SubCategory.PAKISTANI -> {
-                    listOf(
-                        ContentRow(
-                            "Pakistani Drama Popular",
-                            uniqueItems(repo.getPakistaniDrama()).take(12)
-                        ),
-                        tvRow("Drama", 18, "ur"),
-                        tvRow("Romance", 10749, "ur"),
-                        tvRow("Crime", 80, "ur")
-                    )
-                }
-
-                SubCategory.ALL -> {
-                    listOf(
-                        ContentRow(
-                            "Drama Popular",
-                            uniqueItems(repo.getDrama()).take(12)
-                        ),
-                        tvRow("Drama", 18),
-                        tvRow("Crime", 80),
-                        tvRow("Romance", 10749),
-                        tvRow("Mystery", 9648)
-                    )
-                }
-
-                else -> emptyList()
-            }
-        }
-
-        HomeCategory.ANIME -> {
-            when (subcategory) {
-
-                SubCategory.ANIME -> {
-                    listOf(
-                        ContentRow(
-                            "Anime Popular",
-                            uniqueItems(repo.getAnime()).take(12)
-                        ),
-                        tvRow("Action & Adventure", 10759, "ja"),
-                        tvRow("Comedy", 35, "ja"),
-                        tvRow("Sci-Fi & Fantasy", 10765, "ja"),
-                        tvRow("Mystery", 9648, "ja")
-                    )
-                }
-
-                SubCategory.ANIMATED -> {
-                    listOf(
-                        ContentRow(
-                            "Animated Popular",
-                            uniqueItems(repo.getAnimatedContent()).take(12)
-                        ),
-                        movieRow("Animation", 16),
-                        movieRow("Family", 10751),
-                        movieRow("Comedy", 35),
-                        movieRow("Fantasy", 14)
-                    )
-                }
-
-                SubCategory.CARTOON -> {
-                    listOf(
-                        ContentRow(
-                            "Cartoon Popular",
-                            uniqueItems(repo.getCartoonShows()).take(12)
-                        ),
-                        tvRow("Comedy", 35, "en"),
-                        tvRow("Family", 10751, "en"),
-                        tvRow("Animation", 16, "en"),
-                        tvRow("Action & Adventure", 10759, "en")
-                    )
-                }
-
-                SubCategory.ALL -> {
-                    listOf(
-                        ContentRow(
-                            "Anime Popular",
-                            uniqueItems(repo.getAnime()).take(12)
-                        ),
-                        tvRow("Animation", 16, "ja"),
-                        tvRow("Action & Adventure", 10759, "ja"),
-                        tvRow("Comedy", 35, "ja"),
-                        tvRow("Sci-Fi & Fantasy", 10765, "ja")
-                    )
-                }
-
-                else -> emptyList()
             }
         }
     }
 }
 
 @Composable
-private fun TopBar(onSearch: () -> Unit) {
+private fun TopBar(
+    onSearch: () -> Unit
+) {
+
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(
+                horizontal = 14.dp,
+                vertical = 10.dp
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
 
         Image(
-            painter = painterResource(R.drawable.streamify_logo),
+            painter = painterResource(
+                R.drawable.streamify_logo
+            ),
             contentDescription = "Streamify",
             modifier = Modifier
                 .size(46.dp)
-                .clip(RoundedCornerShape(12.dp)),
+                .clip(
+                    RoundedCornerShape(12.dp)
+                ),
             contentScale = ContentScale.Fit
         )
 
-        Spacer(Modifier.width(8.dp))
+        Spacer(
+            Modifier.width(8.dp)
+        )
 
         Text(
             "Streamify",
@@ -863,23 +824,32 @@ private fun TopBar(onSearch: () -> Unit) {
             fontWeight = FontWeight.Black
         )
 
-        Spacer(Modifier.width(10.dp))
+        Spacer(
+            Modifier.width(10.dp)
+        )
 
         Row(
             Modifier
                 .weight(1f)
                 .height(42.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .clip(
+                    RoundedCornerShape(24.dp)
+                )
                 .background(Surface)
                 .border(
                     1.dp,
                     Red.copy(alpha = .55f),
                     RoundedCornerShape(24.dp)
                 )
-                .clickable { onSearch() }
-                .padding(horizontal = 12.dp),
+                .clickable {
+                    onSearch()
+                }
+                .padding(
+                    horizontal = 12.dp
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
+
             Icon(
                 Icons.Outlined.Search,
                 null,
@@ -887,7 +857,9 @@ private fun TopBar(onSearch: () -> Unit) {
                 modifier = Modifier.size(19.dp)
             )
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(
+                Modifier.width(8.dp)
+            )
 
             Text(
                 "Search movies, series, anime...",
@@ -898,16 +870,23 @@ private fun TopBar(onSearch: () -> Unit) {
             )
         }
 
-        Spacer(Modifier.width(8.dp))
+        Spacer(
+            Modifier.width(8.dp)
+        )
 
         Box(
             Modifier
                 .size(42.dp)
                 .clip(CircleShape)
                 .background(Surface2)
-                .border(2.dp, Red, CircleShape),
+                .border(
+                    2.dp,
+                    Red,
+                    CircleShape
+                ),
             contentAlignment = Alignment.Center
         ) {
+
             Icon(
                 Icons.Outlined.Person,
                 "Profile",
@@ -927,20 +906,30 @@ private fun Hero(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
-    val title = item.title ?: item.name ?: "Untitled"
+
+    val title =
+        item.title
+            ?: item.name
+            ?: "Untitled"
 
     Box(
         Modifier
             .fillMaxWidth()
             .height(200.dp)
-            .padding(horizontal = 14.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .padding(
+                horizontal = 14.dp
+            )
+            .clip(
+                RoundedCornerShape(18.dp)
+            )
             .border(
                 1.dp,
                 Red.copy(alpha = .65f),
                 RoundedCornerShape(18.dp)
             )
-            .clickable { onOpen(item) }
+            .clickable {
+                onOpen(item)
+            }
     ) {
 
         AsyncImage(
@@ -968,7 +957,9 @@ private fun Hero(
 
         Column(
             Modifier
-                .align(Alignment.CenterStart)
+                .align(
+                    Alignment.CenterStart
+                )
                 .padding(
                     start = 28.dp,
                     end = 58.dp
@@ -977,13 +968,16 @@ private fun Hero(
 
             Box(
                 Modifier
-                    .clip(RoundedCornerShape(5.dp))
+                    .clip(
+                        RoundedCornerShape(5.dp)
+                    )
                     .background(Red)
                     .padding(
                         horizontal = 8.dp,
                         vertical = 3.dp
                     )
             ) {
+
                 Text(
                     "TRENDING",
                     color = White,
@@ -992,7 +986,9 @@ private fun Hero(
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(
+                Modifier.height(6.dp)
+            )
 
             Text(
                 title,
@@ -1003,29 +999,43 @@ private fun Hero(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(
+                Modifier.height(4.dp)
+            )
 
             Text(
-                "${if (item.media_type == "tv") "TV Series" else "Movie"}  •  ★ ${
-                    String.format("%.1f", item.vote_average ?: 0.0)
+                "${if (item.media_type == "tv") "TV Series" else "Movie"} • ★ ${
+                    String.format(
+                        "%.1f",
+                        item.vote_average ?: 0.0
+                    )
                 }",
-                color = White.copy(alpha = .85f),
+                color = White.copy(
+                    alpha = .85f
+                ),
                 fontSize = 10.sp
             )
 
-            Spacer(Modifier.height(9.dp))
+            Spacer(
+                Modifier.height(9.dp)
+            )
 
             Row(
                 Modifier
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(
+                        RoundedCornerShape(20.dp)
+                    )
                     .background(RedBrush)
-                    .clickable { onOpen(item) }
+                    .clickable {
+                        onOpen(item)
+                    }
                     .padding(
                         horizontal = 13.dp,
                         vertical = 7.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+
                 Icon(
                     Icons.Outlined.PlayArrow,
                     null,
@@ -1033,7 +1043,9 @@ private fun Hero(
                     modifier = Modifier.size(17.dp)
                 )
 
-                Spacer(Modifier.width(4.dp))
+                Spacer(
+                    Modifier.width(4.dp)
+                )
 
                 Text(
                     "Watch Now",
@@ -1049,9 +1061,13 @@ private fun Hero(
             "Previous",
             tint = White,
             modifier = Modifier
-                .align(Alignment.CenterStart)
+                .align(
+                    Alignment.CenterStart
+                )
                 .size(30.dp)
-                .clickable { onPrev() }
+                .clickable {
+                    onPrev()
+                }
         )
 
         Icon(
@@ -1059,22 +1075,37 @@ private fun Hero(
             "Next",
             tint = White,
             modifier = Modifier
-                .align(Alignment.CenterEnd)
+                .align(
+                    Alignment.CenterEnd
+                )
                 .size(30.dp)
-                .clickable { onNext() }
+                .clickable {
+                    onNext()
+                }
         )
 
         Row(
             Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                .align(
+                    Alignment.BottomCenter
+                )
+                .padding(
+                    bottom = 8.dp
+                ),
+            horizontalArrangement =
+                Arrangement.spacedBy(5.dp)
         ) {
+
             repeat(dots) { index ->
+
                 Box(
                     Modifier
                         .size(
-                            if (index == activeDot) 16.dp else 6.dp,
+                            if (index == activeDot) {
+                                16.dp
+                            } else {
+                                6.dp
+                            },
                             6.dp
                         )
                         .clip(CircleShape)
@@ -1082,7 +1113,9 @@ private fun Hero(
                             if (index == activeDot) {
                                 Red
                             } else {
-                                White.copy(alpha = .45f)
+                                White.copy(
+                                    alpha = .45f
+                                )
                             }
                         )
                 )
@@ -1096,20 +1129,33 @@ private fun CategoryPills(
     selected: HomeCategory,
     onSelect: (HomeCategory) -> Unit
 ) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(HomeCategory.values().toList()) { category ->
 
-            val isSelected = selected == category
+    LazyRow(
+        contentPadding =
+            PaddingValues(
+                horizontal = 14.dp
+            ),
+        horizontalArrangement =
+            Arrangement.spacedBy(8.dp)
+    ) {
+
+        items(
+            HomeCategory.values().toList()
+        ) { category ->
+
+            val isSelected =
+                selected == category
 
             Row(
                 Modifier
-                    .clip(RoundedCornerShape(24.dp))
+                    .clip(
+                        RoundedCornerShape(24.dp)
+                    )
                     .background(
                         if (isSelected) {
-                            Red.copy(alpha = .16f)
+                            Red.copy(
+                                alpha = .16f
+                            )
                         } else {
                             Surface
                         }
@@ -1119,7 +1165,9 @@ private fun CategoryPills(
                         if (isSelected) {
                             Red
                         } else {
-                            White.copy(alpha = .20f)
+                            White.copy(
+                                alpha = .20f
+                            )
                         },
                         RoundedCornerShape(24.dp)
                     )
@@ -1130,27 +1178,37 @@ private fun CategoryPills(
                         horizontal = 14.dp,
                         vertical = 9.dp
                     ),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
 
                 Icon(
                     category.icon,
                     null,
-                    tint = if (isSelected) Red else White,
-                    modifier = Modifier.size(18.dp)
+                    tint =
+                        if (isSelected) {
+                            Red
+                        } else {
+                            White
+                        },
+                    modifier =
+                        Modifier.size(18.dp)
                 )
 
-                Spacer(Modifier.width(6.dp))
+                Spacer(
+                    Modifier.width(6.dp)
+                )
 
                 Text(
                     category.label,
                     color = White,
                     fontSize = 12.sp,
-                    fontWeight = if (isSelected) {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Medium
-                    }
+                    fontWeight =
+                        if (isSelected) {
+                            FontWeight.Bold
+                        } else {
+                            FontWeight.Medium
+                        }
                 )
             }
         }
@@ -1163,17 +1221,26 @@ private fun SubPills(
     selected: SubCategory,
     onSelect: (SubCategory) -> Unit
 ) {
+
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        contentPadding =
+            PaddingValues(
+                horizontal = 16.dp
+            ),
+        horizontalArrangement =
+            Arrangement.spacedBy(6.dp)
     ) {
+
         items(options) { subcategory ->
 
-            val isSelected = selected == subcategory
+            val isSelected =
+                selected == subcategory
 
             Box(
                 Modifier
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(
+                        RoundedCornerShape(16.dp)
+                    )
                     .background(
                         if (isSelected) {
                             RedBrush
@@ -1186,7 +1253,9 @@ private fun SubPills(
                         if (isSelected) {
                             Color.Transparent
                         } else {
-                            White.copy(alpha = .20f)
+                            White.copy(
+                                alpha = .20f
+                            )
                         },
                         RoundedCornerShape(16.dp)
                     )
@@ -1198,15 +1267,17 @@ private fun SubPills(
                         vertical = 6.dp
                     )
             ) {
+
                 Text(
                     subcategory.label,
                     color = White,
                     fontSize = 9.sp,
-                    fontWeight = if (isSelected) {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Medium
-                    },
+                    fontWeight =
+                        if (isSelected) {
+                            FontWeight.Bold
+                        } else {
+                            FontWeight.Medium
+                        },
                     maxLines = 1
                 )
             }
@@ -1215,13 +1286,19 @@ private fun SubPills(
 }
 
 @Composable
-private fun SectionTitle(title: String) {
+private fun SectionTitle(
+    title: String
+) {
+
     Text(
         title,
         color = White,
         fontSize = 15.sp,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(horizontal = 16.dp)
+        modifier =
+            Modifier.padding(
+                horizontal = 16.dp
+            )
     )
 }
 
@@ -1230,18 +1307,25 @@ private fun PosterRow(
     items: List<TmdbItem>,
     onOpen: (TmdbItem) -> Unit
 ) {
+
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(9.dp)
+        contentPadding =
+            PaddingValues(
+                horizontal = 14.dp
+            ),
+        horizontalArrangement =
+            Arrangement.spacedBy(9.dp)
     ) {
+
         items(
             uniqueItems(items),
             key = {
                 "${it.media_type ?: ""}-${it.id}"
             }
-        ) {
+        ) { item ->
+
             PosterCard(
-                item = it,
+                item = item,
                 onOpen = onOpen
             )
         }
@@ -1253,20 +1337,28 @@ private fun PosterCard(
     item: TmdbItem,
     onOpen: (TmdbItem) -> Unit
 ) {
-    val title = item.title ?: item.name ?: "Untitled"
+
+    val title =
+        item.title
+            ?: item.name
+            ?: "Untitled"
 
     Box(
         Modifier
             .width(108.dp)
             .height(160.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(
+                RoundedCornerShape(12.dp)
+            )
             .background(Surface)
             .border(
                 1.dp,
                 Red.copy(alpha = .32f),
                 RoundedCornerShape(12.dp)
             )
-            .clickable { onOpen(item) }
+            .clickable {
+                onOpen(item)
+            }
     ) {
 
         AsyncImage(
@@ -1294,7 +1386,9 @@ private fun PosterCard(
 
         Column(
             Modifier
-                .align(Alignment.BottomStart)
+                .align(
+                    Alignment.BottomStart
+                )
                 .padding(7.dp)
         ) {
 
@@ -1309,7 +1403,10 @@ private fun PosterCard(
 
             Text(
                 "${if (item.media_type == "tv") "TV" else "Movie"} • ★ ${
-                    String.format("%.1f", item.vote_average ?: 0.0)
+                    String.format(
+                        "%.1f",
+                        item.vote_average ?: 0.0
+                    )
                 }",
                 color = Grey,
                 fontSize = 8.sp
@@ -1323,14 +1420,19 @@ private fun SearchScreen(
     onBack: () -> Unit,
     onOpen: (TmdbItem) -> Unit
 ) {
-    val repo = remember { TmdbRepository() }
+
+    val repo = remember {
+        TmdbRepository()
+    }
 
     var query by remember {
         mutableStateOf("")
     }
 
     var results by remember {
-        mutableStateOf<List<TmdbItem>>(emptyList())
+        mutableStateOf<List<TmdbItem>>(
+            emptyList()
+        )
     }
 
     var loading by remember {
@@ -1343,12 +1445,17 @@ private fun SearchScreen(
         Modifier
             .fillMaxSize()
             .background(Black)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = 14.dp)
+            .windowInsetsPadding(
+                WindowInsets.statusBars
+            )
+            .padding(
+                horizontal = 14.dp
+            )
     ) {
 
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             IconButton(
@@ -1387,29 +1494,37 @@ private fun SearchScreen(
                     focusedTextColor = White,
                     unfocusedTextColor = White,
                     cursorColor = Red,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    focusedIndicatorColor =
+                        Color.Transparent,
+                    unfocusedIndicatorColor =
+                        Color.Transparent
                 ),
-                shape = RoundedCornerShape(24.dp)
+                shape =
+                    RoundedCornerShape(24.dp)
             )
 
             IconButton(
                 onClick = {
+
                     if (query.isNotBlank()) {
+
                         loading = true
 
                         scope.launch {
-                            results = try {
-                                repo.search(query)
-                            } catch (_: Exception) {
-                                emptyList()
-                            }
+
+                            results =
+                                try {
+                                    repo.search(query)
+                                } catch (_: Exception) {
+                                    emptyList()
+                                }
 
                             loading = false
                         }
                     }
                 }
             ) {
+
                 Icon(
                     Icons.Outlined.Search,
                     "Search",
@@ -1418,31 +1533,43 @@ private fun SearchScreen(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(
+            Modifier.height(12.dp)
+        )
 
         if (loading) {
 
             Box(
                 Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment =
+                    Alignment.Center
             ) {
-                CircularProgressIndicator(color = Red)
+
+                CircularProgressIndicator(
+                    color = Red
+                )
             }
 
         } else {
 
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(9.dp),
-                contentPadding = PaddingValues(bottom = 20.dp)
+                verticalArrangement =
+                    Arrangement.spacedBy(9.dp),
+                contentPadding =
+                    PaddingValues(
+                        bottom = 20.dp
+                    )
             ) {
+
                 items(
                     uniqueItems(results),
                     key = {
                         "${it.media_type ?: ""}-${it.id}"
                     }
-                ) {
+                ) { item ->
+
                     ListRow(
-                        item = it,
+                        item = item,
                         onOpen = onOpen
                     )
                 }
@@ -1456,12 +1583,18 @@ private fun ListRow(
     item: TmdbItem,
     onOpen: (TmdbItem) -> Unit
 ) {
-    val title = item.title ?: item.name ?: "Untitled"
+
+    val title =
+        item.title
+            ?: item.name
+            ?: "Untitled"
 
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(
+                RoundedCornerShape(14.dp)
+            )
             .background(Surface)
             .border(
                 1.dp,
@@ -1479,13 +1612,19 @@ private fun ListRow(
                 TMDB_IMAGE + "w185" + it
             },
             contentDescription = title,
-            modifier = Modifier
-                .size(62.dp, 90.dp)
-                .clip(RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
+            modifier =
+                Modifier
+                    .size(62.dp, 90.dp)
+                    .clip(
+                        RoundedCornerShape(8.dp)
+                    ),
+            contentScale =
+                ContentScale.Crop
         )
 
-        Spacer(Modifier.width(11.dp))
+        Spacer(
+            Modifier.width(11.dp)
+        )
 
         Column(
             Modifier.weight(1f)
@@ -1499,7 +1638,9 @@ private fun ListRow(
                 maxLines = 2
             )
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(
+                Modifier.height(4.dp)
+            )
 
             Text(
                 if (item.media_type == "tv") {
@@ -1511,14 +1652,18 @@ private fun ListRow(
                 fontSize = 10.sp
             )
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(
+                Modifier.height(4.dp)
+            )
 
             Text(
-                item.overview ?: "No description available.",
+                item.overview
+                    ?: "No description available.",
                 color = Grey,
                 fontSize = 10.sp,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow =
+                    TextOverflow.Ellipsis
             )
         }
     }
@@ -1533,35 +1678,55 @@ private fun DetailScreen(
     onDownload: () -> Unit,
     onOpenSimilar: (TmdbItem) -> Unit
 ) {
-    val repo = remember { TmdbRepository() }
+
+    val repo = remember {
+        TmdbRepository()
+    }
 
     var details by remember {
         mutableStateOf(item)
     }
 
     var similar by remember {
-        mutableStateOf<List<TmdbItem>>(emptyList())
+        mutableStateOf<List<TmdbItem>>(
+            emptyList()
+        )
     }
 
-    LaunchedEffect(item.id, item.media_type) {
+    LaunchedEffect(
+        item.id,
+        item.media_type
+    ) {
+
         details = item
 
         try {
-            details = repo.getDetails(item)
-            similar = uniqueItems(
-                repo.getSimilar(item)
-            ).take(12)
+
+            details =
+                repo.getDetails(item)
+
+            similar =
+                uniqueItems(
+                    repo.getSimilar(item)
+                ).take(12)
+
         } catch (_: Exception) {
         }
     }
 
-    val title = details.title ?: details.name ?: "Untitled"
+    val title =
+        details.title
+            ?: details.name
+            ?: "Untitled"
 
     LazyColumn(
         Modifier
             .fillMaxSize()
             .background(Black),
-        contentPadding = PaddingValues(bottom = 28.dp)
+        contentPadding =
+            PaddingValues(
+                bottom = 28.dp
+            )
     ) {
 
         item {
@@ -1573,12 +1738,15 @@ private fun DetailScreen(
             ) {
 
                 AsyncImage(
-                    model = details.backdrop_path?.let {
-                        TMDB_IMAGE + "w780" + it
-                    },
+                    model =
+                        details.backdrop_path?.let {
+                            TMDB_IMAGE + "w780" + it
+                        },
                     contentDescription = title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    modifier =
+                        Modifier.fillMaxSize(),
+                    contentScale =
+                        ContentScale.Crop
                 )
 
                 Box(
@@ -1588,7 +1756,9 @@ private fun DetailScreen(
                             Brush.verticalGradient(
                                 listOf(
                                     Color.Transparent,
-                                    Black.copy(alpha = .25f),
+                                    Black.copy(
+                                        alpha = .25f
+                                    ),
                                     Black
                                 )
                             )
@@ -1597,11 +1767,13 @@ private fun DetailScreen(
 
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.padding(
-                        top = 8.dp,
-                        start = 8.dp
-                    )
+                    modifier =
+                        Modifier.padding(
+                            top = 8.dp,
+                            start = 8.dp
+                        )
                 ) {
+
                     Icon(
                         Icons.Outlined.ArrowBack,
                         "Back",
@@ -1611,24 +1783,31 @@ private fun DetailScreen(
 
                 Box(
                     Modifier
-                        .align(Alignment.Center)
+                        .align(
+                            Alignment.Center
+                        )
                         .size(58.dp)
                         .clip(CircleShape)
                         .background(
-                            Black.copy(alpha = .5f)
+                            Black.copy(
+                                alpha = .5f
+                            )
                         )
                         .border(
                             2.dp,
                             White,
                             CircleShape
                         ),
-                    contentAlignment = Alignment.Center
+                    contentAlignment =
+                        Alignment.Center
                 ) {
+
                     Icon(
                         Icons.Outlined.PlayArrow,
                         "Play",
                         tint = White,
-                        modifier = Modifier.size(34.dp)
+                        modifier =
+                            Modifier.size(34.dp)
                     )
                 }
             }
@@ -1637,42 +1816,55 @@ private fun DetailScreen(
         item {
 
             Column(
-                Modifier.padding(horizontal = 18.dp)
+                Modifier.padding(
+                    horizontal = 18.dp
+                )
             ) {
 
                 Text(
                     title,
                     color = White,
                     fontSize = 27.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight =
+                        FontWeight.ExtraBold
                 )
 
-                Spacer(Modifier.height(7.dp))
+                Spacer(
+                    Modifier.height(7.dp)
+                )
 
                 Row(
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
 
                     Tag("HD")
 
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(
+                        Modifier.width(6.dp)
+                    )
 
                     Tag("13+")
 
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(
+                        Modifier.width(10.dp)
+                    )
 
                     Text(
                         "★ ${
                             String.format(
                                 "%.1f",
-                                details.vote_average ?: 0.0
+                                details.vote_average
+                                    ?: 0.0
                             )
                         }",
                         color = Gold,
                         fontSize = 11.sp
                     )
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(
+                        Modifier.width(8.dp)
+                    )
 
                     Text(
                         if (details.media_type == "tv") {
@@ -1687,78 +1879,109 @@ private fun DetailScreen(
 
                 if (!details.genres.isNullOrEmpty()) {
 
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(
+                        Modifier.height(6.dp)
+                    )
 
                     Text(
-                        details.genres!!.joinToString("  •  ") {
-                            it.name
-                        },
+                        details.genres!!
+                            .joinToString(
+                                "  •  "
+                            ) {
+                                it.name
+                            },
                         color = Grey,
                         fontSize = 11.sp
                     )
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(
+                    Modifier.height(14.dp)
+                )
 
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalAlignment =
+                        Alignment.CenterVertically,
+                    horizontalArrangement =
+                        Arrangement.spacedBy(14.dp)
                 ) {
 
                     Row(
                         Modifier
                             .weight(1f)
                             .height(46.dp)
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(
+                                RoundedCornerShape(
+                                    24.dp
+                                )
+                            )
                             .background(RedBrush)
                             .clickable {
                                 // PLAYBACK SOURCE INTEGRATION SLOT
                             },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                        horizontalArrangement =
+                            Arrangement.Center
                     ) {
 
                         Icon(
                             Icons.Outlined.PlayArrow,
                             null,
                             tint = White,
-                            modifier = Modifier.size(22.dp)
+                            modifier =
+                                Modifier.size(22.dp)
                         )
 
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(
+                            Modifier.width(4.dp)
+                        )
 
                         Text(
                             "Play",
                             color = White,
                             fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight =
+                                FontWeight.Bold
                         )
                     }
 
                     IconAction(
-                        icon = if (inList) {
-                            Icons.Outlined.Check
-                        } else {
-                            Icons.Outlined.Add
-                        },
-                        label = if (inList) "Added" else "My List",
-                        onClick = onToggleList
+                        icon =
+                            if (inList) {
+                                Icons.Outlined.Check
+                            } else {
+                                Icons.Outlined.Add
+                            },
+                        label =
+                            if (inList) {
+                                "Added"
+                            } else {
+                                "My List"
+                            },
+                        onClick =
+                            onToggleList
                     )
 
                     IconAction(
-                        icon = Icons.Outlined.Download,
+                        icon =
+                            Icons.Outlined.Download,
                         label = "Download",
-                        onClick = onDownload
+                        onClick =
+                            onDownload
                     )
 
                     IconAction(
-                        icon = Icons.Outlined.Share,
+                        icon =
+                            Icons.Outlined.Share,
                         label = "Share",
                         onClick = {}
                     )
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(
+                    Modifier.height(20.dp)
+                )
 
                 Text(
                     "About",
@@ -1767,7 +1990,9 @@ private fun DetailScreen(
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(
+                    Modifier.height(6.dp)
+                )
 
                 Text(
                     details.overview
@@ -1783,22 +2008,34 @@ private fun DetailScreen(
 
             item {
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(
+                    Modifier.height(22.dp)
+                )
 
-                SectionTitle("Because You Watched This")
+                SectionTitle(
+                    "Because You Watched This"
+                )
 
-                Spacer(Modifier.height(9.dp))
+                Spacer(
+                    Modifier.height(9.dp)
+                )
 
                 PosterRow(
                     items = similar,
                     onOpen = onOpenSimilar
                 )
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(
+                    Modifier.height(20.dp)
+                )
 
-                SectionTitle("Similar to $title")
+                SectionTitle(
+                    "Similar to $title"
+                )
 
-                Spacer(Modifier.height(9.dp))
+                Spacer(
+                    Modifier.height(9.dp)
+                )
 
                 PosterRow(
                     items = similar.reversed(),
@@ -1810,10 +2047,15 @@ private fun DetailScreen(
 }
 
 @Composable
-private fun Tag(text: String) {
+private fun Tag(
+    text: String
+) {
+
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(
+                RoundedCornerShape(4.dp)
+            )
             .border(
                 1.dp,
                 White.copy(alpha = .6f),
@@ -1824,6 +2066,7 @@ private fun Tag(text: String) {
                 vertical = 1.dp
             )
     ) {
+
         Text(
             text,
             color = White,
@@ -1839,21 +2082,26 @@ private fun IconAction(
     label: String,
     onClick: () -> Unit
 ) {
+
     Column(
         Modifier.clickable {
             onClick()
         },
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment =
+            Alignment.CenterHorizontally
     ) {
 
         Icon(
             icon,
             label,
             tint = White,
-            modifier = Modifier.size(22.dp)
+            modifier =
+                Modifier.size(22.dp)
         )
 
-        Spacer(Modifier.height(2.dp))
+        Spacer(
+            Modifier.height(2.dp)
+        )
 
         Text(
             label,
@@ -1871,23 +2119,28 @@ private fun CollectionScreen(
     onBack: () -> Unit,
     onOpen: (TmdbItem) -> Unit
 ) {
+
     Column(
         Modifier
             .fillMaxSize()
             .background(Black)
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(
+                WindowInsets.statusBars
+            )
     ) {
 
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(7.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             IconButton(
                 onClick = onBack
             ) {
+
                 Icon(
                     Icons.Outlined.ArrowBack,
                     "Back",
@@ -1899,7 +2152,8 @@ private fun CollectionScreen(
                 title,
                 color = White,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight =
+                    FontWeight.Bold
             )
         }
 
@@ -1907,8 +2161,10 @@ private fun CollectionScreen(
 
             Box(
                 Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment =
+                    Alignment.Center
             ) {
+
                 Text(
                     emptyText,
                     color = Grey,
@@ -1921,18 +2177,26 @@ private fun CollectionScreen(
             LazyColumn(
                 Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(9.dp),
-                contentPadding = PaddingValues(bottom = 20.dp)
+                    .padding(
+                        horizontal = 12.dp
+                    ),
+                verticalArrangement =
+                    Arrangement.spacedBy(9.dp),
+                contentPadding =
+                    PaddingValues(
+                        bottom = 20.dp
+                    )
             ) {
+
                 items(
                     uniqueItems(items),
                     key = {
                         "${it.media_type ?: ""}-${it.id}"
                     }
-                ) {
+                ) { item ->
+
                     ListRow(
-                        item = it,
+                        item = item,
                         onOpen = onOpen
                     )
                 }
@@ -1945,23 +2209,28 @@ private fun CollectionScreen(
 private fun SettingsScreen(
     onBack: () -> Unit
 ) {
+
     Column(
         Modifier
             .fillMaxSize()
             .background(Black)
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(
+                WindowInsets.statusBars
+            )
     ) {
 
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(7.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             IconButton(
                 onClick = onBack
             ) {
+
                 Icon(
                     Icons.Outlined.ArrowBack,
                     "Back",
@@ -1973,7 +2242,8 @@ private fun SettingsScreen(
                 "Settings",
                 color = White,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight =
+                    FontWeight.Bold
             )
         }
 
@@ -2004,6 +2274,7 @@ private fun Setting(
     title: String,
     subtitle: String
 ) {
+
     Column(
         Modifier
             .fillMaxWidth()
@@ -2017,10 +2288,13 @@ private fun Setting(
             title,
             color = White,
             fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight =
+                FontWeight.SemiBold
         )
 
-        Spacer(Modifier.height(3.dp))
+        Spacer(
+            Modifier.height(3.dp)
+        )
 
         Text(
             subtitle,
@@ -2038,6 +2312,7 @@ private fun BottomBar(
     onDownloads: () -> Unit,
     onSettings: () -> Unit
 ) {
+
     Row(
         Modifier
             .fillMaxWidth()
@@ -2045,7 +2320,9 @@ private fun BottomBar(
                 horizontal = 14.dp,
                 vertical = 8.dp
             )
-            .clip(RoundedCornerShape(30.dp))
+            .clip(
+                RoundedCornerShape(30.dp)
+            )
             .background(
                 Black.copy(alpha = .96f)
             )
@@ -2054,22 +2331,28 @@ private fun BottomBar(
                 Red.copy(alpha = .8f),
                 RoundedCornerShape(30.dp)
             )
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(
+                vertical = 8.dp
+            ),
+        horizontalArrangement =
+            Arrangement.SpaceEvenly,
+        verticalAlignment =
+            Alignment.CenterVertically
     ) {
 
         NavItem(
             icon = Icons.Outlined.Home,
             label = "Home",
-            selected = selected == Screen.HOME,
+            selected =
+                selected == Screen.HOME,
             onClick = onHome
         )
 
         NavItem(
             icon = Icons.Outlined.List,
             label = "My List",
-            selected = selected == Screen.MY_LIST,
+            selected =
+                selected == Screen.MY_LIST,
             onClick = onMyList
         )
 
@@ -2083,27 +2366,32 @@ private fun BottomBar(
                     White.copy(alpha = .25f),
                     CircleShape
                 ),
-            contentAlignment = Alignment.Center
+            contentAlignment =
+                Alignment.Center
         ) {
+
             Icon(
                 Icons.Outlined.PlayArrow,
                 "Play",
                 tint = White,
-                modifier = Modifier.size(30.dp)
+                modifier =
+                    Modifier.size(30.dp)
             )
         }
 
         NavItem(
             icon = Icons.Outlined.Download,
             label = "Downloads",
-            selected = selected == Screen.DOWNLOADS,
+            selected =
+                selected == Screen.DOWNLOADS,
             onClick = onDownloads
         )
 
         NavItem(
             icon = Icons.Outlined.Settings,
             label = "Settings",
-            selected = selected == Screen.SETTINGS,
+            selected =
+                selected == Screen.SETTINGS,
             onClick = onSettings
         )
     }
@@ -2116,33 +2404,51 @@ private fun NavItem(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+
     Column(
         Modifier
             .clickable {
                 onClick()
             }
-            .padding(horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(
+                horizontal = 6.dp
+            ),
+        horizontalAlignment =
+            Alignment.CenterHorizontally
     ) {
 
         Icon(
             icon,
             label,
-            tint = if (selected) Red else White,
-            modifier = Modifier.size(23.dp)
+            tint =
+                if (selected) {
+                    Red
+                } else {
+                    White
+                },
+            modifier =
+                Modifier.size(23.dp)
         )
 
-        Spacer(Modifier.height(1.dp))
+        Spacer(
+            Modifier.height(1.dp)
+        )
 
         Text(
             label,
-            color = if (selected) Red else White,
+            color =
+                if (selected) {
+                    Red
+                } else {
+                    White
+                },
             fontSize = 9.sp,
-            fontWeight = if (selected) {
-                FontWeight.Bold
-            } else {
-                FontWeight.Normal
-            }
+            fontWeight =
+                if (selected) {
+                    FontWeight.Bold
+                } else {
+                    FontWeight.Normal
+                }
         )
     }
 }
