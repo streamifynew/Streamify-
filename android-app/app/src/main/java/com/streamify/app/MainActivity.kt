@@ -8,7 +8,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -126,68 +131,101 @@ private fun TmdbItem.sameAs(o: TmdbItem) = id == o.id && media_type == o.media_t
 private fun StreamifyApp() {
     var screen by remember { mutableStateOf(Screen.HOME) }
     var category by remember { mutableStateOf(HomeCategory.TRENDING) }
+    var homeTick by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<TmdbItem?>(null) }
     var myList by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
     var downloads by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
 
     BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
     val open: (TmdbItem) -> Unit = { selected = it; screen = Screen.DETAIL }
+    val showBar = screen == Screen.HOME || screen == Screen.MY_LIST ||
+        screen == Screen.DOWNLOADS || screen == Screen.SETTINGS
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF34060B), Black), endY = 1500f))) {
-        when (screen) {
-            Screen.HOME -> HomeScreen(
-                category, { category = it }, { screen = Screen.SEARCH }, open,
-                { screen = Screen.MY_LIST }, { screen = Screen.DOWNLOADS }, { screen = Screen.SETTINGS }
-            )
-            Screen.SEARCH -> SearchScreen({ screen = Screen.HOME }, open)
-            Screen.DETAIL -> selected?.let { item ->
-                DetailScreen(
-                    item = item,
-                    inList = myList.containsSame(item),
-                    onBack = { screen = Screen.HOME },
-                    onToggleList = {
-                        myList = if (myList.containsSame(item)) myList.filterNot { it.sameAs(item) } else myList + item
-                    },
-                    onDownload = { if (!downloads.containsSame(item)) downloads = downloads + item },
-                    onOpenSimilar = { selected = it }
-                )
+    Column(
+        Modifier.fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF34060B), Black), endY = 1500f))
+            .windowInsetsPadding(WindowInsets.navigationBars)
+    ) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when (screen) {
+                Screen.HOME -> HomeScreen(category, { category = it }, { screen = Screen.SEARCH }, open, homeTick)
+                Screen.SEARCH -> SearchScreen({ screen = Screen.HOME }, open)
+                Screen.DETAIL -> selected?.let { item ->
+                    DetailScreen(
+                        item = item,
+                        inList = myList.containsSame(item),
+                        onBack = { screen = Screen.HOME },
+                        onToggleList = {
+                            myList = if (myList.containsSame(item)) myList.filterNot { it.sameAs(item) } else myList + item
+                        },
+                        onDownload = { if (!downloads.containsSame(item)) downloads = downloads + item },
+                        onOpenSimilar = { selected = it }
+                    )
+                }
+                Screen.MY_LIST -> CollectionScreen("My List", myList, "Your watchlist is empty.", { screen = Screen.HOME }, open)
+                Screen.DOWNLOADS -> CollectionScreen("Downloads", downloads, "No downloads yet.", { screen = Screen.HOME }, open)
+                Screen.SETTINGS -> SettingsScreen { screen = Screen.HOME }
             }
-            Screen.MY_LIST -> CollectionScreen("My List", myList, "Your watchlist is empty.", { screen = Screen.HOME }, open)
-            Screen.DOWNLOADS -> CollectionScreen("Downloads", downloads, "No downloads yet.", { screen = Screen.HOME }, open)
-            Screen.SETTINGS -> SettingsScreen { screen = Screen.HOME }
+        }
+        if (showBar) {
+            BottomBar(
+                selected = screen,
+                onHome = { category = HomeCategory.TRENDING; homeTick++; screen = Screen.HOME },
+                onMyList = { screen = Screen.MY_LIST },
+                onDownloads = { screen = Screen.DOWNLOADS },
+                onSettings = { screen = Screen.SETTINGS }
+            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeScreen(
     category: HomeCategory,
     onCategory: (HomeCategory) -> Unit,
     onSearch: () -> Unit,
     onOpen: (TmdbItem) -> Unit,
-    onMyList: () -> Unit,
-    onDownloads: () -> Unit,
-    onSettings: () -> Unit
+    resetTick: Int
 ) {
     val repo = remember { TmdbRepository() }
-    var hero by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
-    var heroIndex by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var headerH by remember { mutableStateOf(150.dp) }
+    var trending by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
+    var sub by remember(category) { mutableStateOf(SubCategory.ALL) }
+    var gridItems by remember(category, sub) { mutableStateOf<List<TmdbItem>>(emptyList()) }
+    var gridLoading by remember(category, sub) { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) { hero = try { repo.getTrending().take(5) } catch (_: Exception) { emptyList() } }
-    LaunchedEffect(hero, heroIndex) {
-        if (hero.size > 1) { delay(3000); heroIndex = (heroIndex + 1) % hero.size }
+    LaunchedEffect(Unit) { trending = try { repo.getTrending() } catch (_: Exception) { emptyList() } }
+    LaunchedEffect(category, sub) {
+        if (category != HomeCategory.TRENDING) {
+            gridLoading = true
+            gridItems = try { loadContent(repo, category, sub) } catch (_: Exception) { emptyList() }
+            gridLoading = false
+        }
+    }
+    LaunchedEffect(resetTick, category) { listState.scrollToItem(0) }
+
+    val hero = remember(trending, gridItems, category) {
+        (if (category == HomeCategory.TRENDING || gridItems.isEmpty()) trending else gridItems).take(5)
+    }
+    val pagerState = rememberPagerState(pageCount = { hero.size })
+    LaunchedEffect(hero) { if (hero.isNotEmpty()) pagerState.scrollToPage(0) }
+    LaunchedEffect(hero, pagerState.currentPage) {
+        if (hero.size > 1) {
+            delay(3000)
+            pagerState.animateScrollToPage((pagerState.currentPage + 1) % hero.size)
+        }
     }
 
-    val sections = if (category == HomeCategory.TRENDING)
-        listOf(HomeCategory.TRENDING, HomeCategory.MOVIES, HomeCategory.TV, HomeCategory.ANIME)
-    else listOf(category)
-
-    val density = LocalDensity.current
-    var headerH by remember { mutableStateOf(150.dp) }
-
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
-      Box(Modifier.weight(1f).fillMaxWidth()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = headerH, bottom = 16.dp)) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(top = headerH, bottom = 16.dp)
+        ) {
             item {
                 if (hero.isEmpty()) {
                     Box(
@@ -196,15 +234,46 @@ private fun HomeScreen(
                         contentAlignment = Alignment.Center
                     ) { CircularProgressIndicator(color = Red, strokeWidth = 3.dp) }
                 } else {
-                    Hero(
-                        hero[heroIndex.coerceIn(0, hero.lastIndex)], hero.size, heroIndex, onOpen,
-                        onPrev = { heroIndex = (heroIndex - 1 + hero.size) % hero.size },
-                        onNext = { heroIndex = (heroIndex + 1) % hero.size }
+                    HeroPager(
+                        hero, pagerState, onOpen,
+                        onPrev = { scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1 + hero.size) % hero.size) } },
+                        onNext = { scope.launch { pagerState.animateScrollToPage((pagerState.currentPage + 1) % hero.size) } }
                     )
                 }
             }
-            sections.forEach { c ->
-                item(key = c.name) { CategorySection(c, onOpen) }
+            if (category == HomeCategory.TRENDING) {
+                listOf(HomeCategory.TRENDING, HomeCategory.MOVIES, HomeCategory.TV, HomeCategory.ANIME).forEach { c ->
+                    item(key = c.name) { CategorySection(c, onOpen) }
+                }
+            } else {
+                item(key = "grid-header") { GridHeader(category, sub) { sub = it } }
+                if (gridLoading) {
+                    item(key = "grid-loading") {
+                        Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Red, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+                        }
+                    }
+                } else if (gridItems.isEmpty()) {
+                    item(key = "grid-empty") {
+                        Text(
+                            if (sub == SubCategory.MULTI_AUDIO || sub == SubCategory.HINDI_DUBBED)
+                                "Connect your playback source metadata to show ${sub.label} titles."
+                            else "No content available.",
+                            color = Grey, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp)
+                        )
+                    }
+                } else {
+                    items(gridItems.chunked(3)) { row ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            row.forEach { PosterCard(it, onOpen, null, Modifier.weight(1f).aspectRatio(0.68f)) }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
             }
         }
         // Pinned header: logo, search and categories stay on top; content fades under them
@@ -224,8 +293,19 @@ private fun HomeScreen(
             CategoryPills(category, onCategory)
             Spacer(Modifier.height(18.dp))
         }
-      }
-      BottomBar(Screen.HOME, {}, onMyList, onDownloads, onSettings)
+    }
+}
+
+@Composable
+private fun GridHeader(cat: HomeCategory, sub: SubCategory, onSub: (SubCategory) -> Unit) {
+    Column(Modifier.padding(top = 18.dp, bottom = 12.dp)) {
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(cat.icon, null, tint = Red, modifier = Modifier.size(26.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(cat.label, color = White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.padding(horizontal = 14.dp)) { SubPills(subcategories(cat), sub, onSub) }
     }
 }
 
@@ -306,18 +386,47 @@ private fun TopBar(onSearch: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Hero(
-    item: TmdbItem, dots: Int, activeDot: Int, onOpen: (TmdbItem) -> Unit,
+private fun HeroPager(
+    items: List<TmdbItem>, pagerState: PagerState, onOpen: (TmdbItem) -> Unit,
     onPrev: () -> Unit, onNext: () -> Unit
 ) {
-    val title = item.title ?: item.name ?: "Untitled"
     Box(
         Modifier.fillMaxWidth().height(200.dp).padding(horizontal = 14.dp)
             .clip(RoundedCornerShape(18.dp))
             .border(1.dp, Red.copy(alpha = .6f), RoundedCornerShape(18.dp))
-            .clickable { onOpen(item) }
     ) {
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            HeroSlide(items[page.coerceIn(0, items.lastIndex)], onOpen)
+        }
+        Icon(
+            Icons.Outlined.KeyboardArrowLeft, "Previous", tint = White,
+            modifier = Modifier.align(Alignment.CenterStart).size(30.dp).clickable { onPrev() }
+        )
+        Icon(
+            Icons.Outlined.KeyboardArrowRight, "Next", tint = White,
+            modifier = Modifier.align(Alignment.CenterEnd).size(30.dp).clickable { onNext() }
+        )
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            repeat(items.size) { i ->
+                val active = i == pagerState.currentPage
+                Box(
+                    Modifier.size(if (active) 16.dp else 6.dp, 6.dp).clip(CircleShape)
+                        .background(if (active) Red else White.copy(alpha = .45f))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroSlide(item: TmdbItem, onOpen: (TmdbItem) -> Unit) {
+    val title = item.title ?: item.name ?: "Untitled"
+    Box(Modifier.fillMaxSize().clickable { onOpen(item) }) {
         AsyncImage(
             model = item.backdrop_path?.let { TMDB_IMAGE + "w780" + it },
             contentDescription = title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
@@ -347,25 +456,6 @@ private fun Hero(
                 Icon(Icons.Outlined.PlayArrow, null, tint = White, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Watch Now", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        Icon(
-            Icons.Outlined.KeyboardArrowLeft, "Previous", tint = White,
-            modifier = Modifier.align(Alignment.CenterStart).size(30.dp).clickable { onPrev() }
-        )
-        Icon(
-            Icons.Outlined.KeyboardArrowRight, "Next", tint = White,
-            modifier = Modifier.align(Alignment.CenterEnd).size(30.dp).clickable { onNext() }
-        )
-        Row(
-            Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            repeat(dots) { i ->
-                Box(
-                    Modifier.size(if (i == activeDot) 16.dp else 6.dp, 6.dp).clip(CircleShape)
-                        .background(if (i == activeDot) Red else White.copy(alpha = .45f))
-                )
             }
         }
     }
@@ -427,10 +517,13 @@ private fun PosterRow(items: List<TmdbItem>, onOpen: (TmdbItem) -> Unit, tag: St
 }
 
 @Composable
-private fun PosterCard(item: TmdbItem, onOpen: (TmdbItem) -> Unit, tag: String?) {
+private fun PosterCard(
+    item: TmdbItem, onOpen: (TmdbItem) -> Unit, tag: String?,
+    modifier: Modifier = Modifier.width(108.dp).height(160.dp)
+) {
     val title = item.title ?: item.name ?: "Untitled"
     Box(
-        Modifier.width(108.dp).height(160.dp).clip(RoundedCornerShape(12.dp))
+        modifier.clip(RoundedCornerShape(12.dp))
             .background(Surface)
             .border(1.dp, Red.copy(alpha = .35f), RoundedCornerShape(12.dp))
             .clickable { onOpen(item) }
@@ -453,7 +546,8 @@ private fun PosterCard(item: TmdbItem, onOpen: (TmdbItem) -> Unit, tag: String?)
         Column(Modifier.align(Alignment.BottomStart).padding(7.dp)) {
             Text(title, color = White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                "${if (item.media_type == "tv") "TV" else "Movie"} • ★ ${String.format("%.1f", item.vote_average ?: 0.0)}",
+                (if (item.media_type == "tv") "TV" else "Movie") +
+                    ((item.vote_average ?: 0.0).takeIf { it > 0 }?.let { " • ★ " + String.format("%.1f", it) } ?: ""),
                 color = Grey, fontSize = 8.sp
             )
             Spacer(Modifier.height(3.dp))
