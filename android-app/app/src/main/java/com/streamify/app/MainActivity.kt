@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.activity.ComponentActivity
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -81,7 +84,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { HOME, SEARCH, DETAIL, MY_LIST, DOWNLOADS, SETTINGS, SEE_ALL }
+private enum class Screen { HOME, SEARCH, DETAIL, MY_LIST, DOWNLOADS, SETTINGS, SEE_ALL, PROFILE, PLAYBACK, ABOUT }
 
 private data class SeeAllReq(val title: String, val spec: BrowseSpec)
 
@@ -255,77 +258,86 @@ private fun installApk(context: Context, file: File): Boolean {
     return true
 }
 
+private fun installedVersionCode(context: Context): Int =
+    try {
+        PackageInfoCompat.getLongVersionCode(
+            context.packageManager.getPackageInfo(context.packageName, 0)
+        ).toInt()
+    } catch (_: Exception) { Int.MAX_VALUE }
+
+private fun appVersionName(context: Context): String =
+    try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "" }
+    catch (_: Exception) { "" }
+
+@Composable
+private fun UpdateDialog(info: UpdateInfo, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var progress by remember { mutableStateOf<Float?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val p = progress
+
+    AlertDialog(
+        onDismissRequest = { if (p == null) onDismiss() },
+        containerColor = Color(0xFF1A0B0E),
+        shape = RoundedCornerShape(24.dp),
+        title = { Text("New version available", color = White, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column {
+                Text(
+                    message ?: "A newer Streamify is ready. The update takes only a few seconds.",
+                    color = Grey, fontSize = 13.sp
+                )
+                if (p != null) {
+                    Spacer(Modifier.height(14.dp))
+                    LinearProgressIndicator(
+                        progress = { p },
+                        color = Red,
+                        trackColor = White.copy(alpha = .12f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = p == null,
+                onClick = {
+                    scope.launch {
+                        message = null
+                        progress = 0f
+                        try {
+                            val file = downloadApk(context, info.url) { progress = it }
+                            progress = null
+                            if (installApk(context, file)) onDismiss()
+                            else message = "Allow Install unknown apps for Streamify, then tap Update now again."
+                        } catch (_: Exception) {
+                            progress = null
+                            message = "Download failed. Check your internet and try again."
+                        }
+                    }
+                }
+            ) { Text("Update now", color = Red, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(enabled = p == null, onClick = onDismiss) { Text("Later", color = Grey) }
+        }
+    )
+}
+
 @Composable
 private fun UpdatePrompt() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var update by remember { mutableStateOf<UpdateInfo?>(null) }
     var dismissed by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf<Float?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        val installed = try {
-            PackageInfoCompat.getLongVersionCode(
-                context.packageManager.getPackageInfo(context.packageName, 0)
-            ).toInt()
-        } catch (_: Exception) { Int.MAX_VALUE }
         val latest = fetchLatestUpdate()
-        if (latest != null && latest.code > installed) update = latest
+        if (latest != null && latest.code > installedVersionCode(context)) update = latest
     }
 
     val info = update
-    if (info != null && !dismissed) {
-        val p = progress
-        AlertDialog(
-            onDismissRequest = { if (p == null) dismissed = true },
-            containerColor = Color(0xFF1A0B0E),
-            shape = RoundedCornerShape(24.dp),
-            title = { Text("New version available", color = White, fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Column {
-                    Text(
-                        message ?: "A newer Streamify is ready. The update takes only a few seconds.",
-                        color = Grey, fontSize = 13.sp
-                    )
-                    if (p != null) {
-                        Spacer(Modifier.height(14.dp))
-                        LinearProgressIndicator(
-                            progress = { p },
-                            color = Red,
-                            trackColor = White.copy(alpha = .12f),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = p == null,
-                    onClick = {
-                        scope.launch {
-                            message = null
-                            progress = 0f
-                            try {
-                                val file = downloadApk(context, info.url) { progress = it }
-                                progress = null
-                                if (installApk(context, file)) dismissed = true
-                                else message = "Allow \"Install unknown apps\" for Streamify, then tap Update now again."
-                            } catch (_: Exception) {
-                                progress = null
-                                message = "Download failed. Check your internet and try again."
-                            }
-                        }
-                    }
-                ) { Text("Update now", color = Red, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(enabled = p == null, onClick = { dismissed = true }) {
-                    Text("Later", color = Grey)
-                }
-            }
-        )
-    }
+    if (info != null && !dismissed) UpdateDialog(info) { dismissed = true }
 }
 
 // My List / Downloads are kept on the phone, so they survive closing the app
@@ -382,16 +394,28 @@ private fun StreamifyApp() {
     val prefs = remember { context.getSharedPreferences("streamify", Context.MODE_PRIVATE) }
     var myList by remember { mutableStateOf(loadItems(prefs, "my_list")) }
     var downloads by remember { mutableStateOf(loadItems(prefs, "downloads")) }
+    var profileName by remember { mutableStateOf(prefs.getString("profile_name", "Guest") ?: "Guest") }
+    var quality by remember { mutableStateOf(prefs.getString("quality", "Auto") ?: "Auto") }
+    var autoplay by remember { mutableStateOf(prefs.getBoolean("autoplay", true)) }
+    var wifiOnly by remember { mutableStateOf(prefs.getBoolean("wifi_only", false)) }
+    var profileBack by remember { mutableStateOf(Screen.HOME) }
     val homeList = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val version = remember { appVersionName(context) }
 
+    val goBack: () -> Unit = {
+        screen = when (screen) {
+            Screen.PLAYBACK, Screen.ABOUT -> Screen.SETTINGS
+            Screen.PROFILE -> profileBack
+            else -> Screen.HOME
+        }
+    }
     BackHandler(enabled = screen != Screen.HOME || category != HomeCategory.TRENDING) {
-        if (screen != Screen.HOME) screen = Screen.HOME
+        if (screen != Screen.HOME) goBack()
         else { category = HomeCategory.TRENDING; sub = SubCategory.ALL; scope.launch { homeList.scrollToItem(0) } }
     }
     val open: (TmdbItem) -> Unit = { selected = it; screen = Screen.DETAIL }
-    val showBar = screen == Screen.HOME || screen == Screen.MY_LIST ||
-        screen == Screen.DOWNLOADS || screen == Screen.SETTINGS
+    val showBar = screen != Screen.DETAIL && screen != Screen.SEARCH && screen != Screen.SEE_ALL
 
     UpdatePrompt()
 
@@ -408,6 +432,7 @@ private fun StreamifyApp() {
                     onCategory = { category = it; sub = SubCategory.ALL; scope.launch { homeList.scrollToItem(0) } },
                     onSub = { sub = it },
                     onSearch = { screen = Screen.SEARCH },
+                    onProfile = { profileBack = Screen.HOME; screen = Screen.PROFILE },
                     onOpen = open,
                     onSeeAll = { t, sp -> seeAll = SeeAllReq(t, sp); screen = Screen.SEE_ALL },
                     listState = homeList
@@ -436,12 +461,42 @@ private fun StreamifyApp() {
                 }
                 Screen.MY_LIST -> CollectionScreen("My List", myList, "Your watchlist is empty.", { screen = Screen.HOME }, open)
                 Screen.DOWNLOADS -> CollectionScreen("Downloads", downloads, "No downloads yet.", { screen = Screen.HOME }, open)
-                Screen.SETTINGS -> SettingsScreen { screen = Screen.HOME }
+                Screen.SETTINGS -> SettingsScreen(
+                    version = version,
+                    onBack = { screen = Screen.HOME },
+                    onAccount = { profileBack = Screen.SETTINGS; screen = Screen.PROFILE },
+                    onPlayback = { screen = Screen.PLAYBACK },
+                    onDownloads = { screen = Screen.DOWNLOADS },
+                    onAbout = { screen = Screen.ABOUT }
+                )
+                Screen.PROFILE -> ProfileScreen(
+                    name = profileName,
+                    onName = { profileName = it; prefs.edit().putString("profile_name", it).apply() },
+                    myCount = myList.size,
+                    dlCount = downloads.size,
+                    onBack = goBack,
+                    onMyList = { screen = Screen.MY_LIST },
+                    onDownloads = { screen = Screen.DOWNLOADS }
+                )
+                Screen.PLAYBACK -> PlaybackScreen(
+                    quality = quality,
+                    onQuality = { quality = it; prefs.edit().putString("quality", it).apply() },
+                    autoplay = autoplay,
+                    onAutoplay = { autoplay = it; prefs.edit().putBoolean("autoplay", it).apply() },
+                    wifiOnly = wifiOnly,
+                    onWifiOnly = { wifiOnly = it; prefs.edit().putBoolean("wifi_only", it).apply() },
+                    onBack = goBack
+                )
+                Screen.ABOUT -> AboutScreen(version, goBack)
             }
         }
         if (showBar) {
             BottomBar(
-                selected = screen,
+                selected = when (screen) {
+                    Screen.PLAYBACK, Screen.ABOUT -> Screen.SETTINGS
+                    Screen.PROFILE -> profileBack
+                    else -> screen
+                },
                 onHome = {
                     category = HomeCategory.TRENDING; sub = SubCategory.ALL
                     screen = Screen.HOME
@@ -463,6 +518,7 @@ private fun HomeScreen(
     onCategory: (HomeCategory) -> Unit,
     onSub: (SubCategory) -> Unit,
     onSearch: () -> Unit,
+    onProfile: () -> Unit,
     onOpen: (TmdbItem) -> Unit,
     onSeeAll: (String, BrowseSpec) -> Unit,
     listState: LazyListState
@@ -565,7 +621,7 @@ private fun HomeScreen(
                 )
                 .windowInsetsPadding(WindowInsets.statusBars)
         ) {
-            TopBar(onSearch)
+            TopBar(onSearch, onProfile)
             CategoryPills(category, onCategory)
             Spacer(Modifier.height(18.dp))
         }
@@ -776,7 +832,7 @@ private fun CategorySection(cat: HomeCategory, onOpen: (TmdbItem) -> Unit) {
 }
 
 @Composable
-private fun TopBar(onSearch: () -> Unit) {
+private fun TopBar(onSearch: () -> Unit, onProfile: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -800,7 +856,8 @@ private fun TopBar(onSearch: () -> Unit) {
         }
         Spacer(Modifier.width(10.dp))
         Box(
-            Modifier.size(44.dp).clip(CircleShape).background(Surface2).border(2.dp, Red, CircleShape),
+            Modifier.size(44.dp).clip(CircleShape).background(Surface2).border(2.dp, Red, CircleShape)
+                .clickable { onProfile() },
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Outlined.Person, "Profile", tint = White, modifier = Modifier.size(24.dp)) }
     }
@@ -1160,26 +1217,260 @@ private fun CollectionScreen(
 }
 
 @Composable
-private fun SettingsScreen(onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(Black)) {
-        Row(Modifier.fillMaxWidth().padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "Back", tint = White) }
-            Text("Settings", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-        Setting("Account", "Login and subscription")
-        Setting("Playback", "Video quality and playback settings")
-        Setting("Downloads", "Manage downloaded content")
-        Setting("About Streamify", "App information")
+private fun ScreenTop(title: String, onBack: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "Back", tint = White) }
+        Text(title, color = White, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
 @Composable
-private fun Setting(title: String, subtitle: String) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 15.dp)) {
-        Text(title, color = White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(3.dp))
-        Text(subtitle, color = Grey, fontSize = 11.sp)
+private fun SettingsScreen(
+    version: String,
+    onBack: () -> Unit,
+    onAccount: () -> Unit,
+    onPlayback: () -> Unit,
+    onDownloads: () -> Unit,
+    onAbout: () -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        ScreenTop("Settings", onBack)
+        Setting("Account", "Profile, plan and subscription", onAccount)
+        Setting("Playback", "Video quality and autoplay", onPlayback)
+        Setting("Downloads", "Manage downloaded content", onDownloads)
+        Setting("About Streamify", "Version $version  •  check for updates", onAbout)
     }
+}
+
+@Composable
+private fun Setting(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(3.dp))
+            Text(subtitle, color = Grey, fontSize = 11.sp)
+        }
+        Icon(Icons.Outlined.KeyboardArrowRight, null, tint = Grey)
+    }
+}
+
+@Composable
+private fun ProfileScreen(
+    name: String,
+    onName: (String) -> Unit,
+    myCount: Int,
+    dlCount: Int,
+    onBack: () -> Unit,
+    onMyList: () -> Unit,
+    onDownloads: () -> Unit
+) {
+    val context = LocalContext.current
+    val initial = name.trim().firstOrNull()?.uppercase() ?: "G"
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        ScreenTop("Profile", onBack)
+        Box(
+            Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp).size(96.dp)
+                .clip(CircleShape).background(RedBrush)
+                .border(2.dp, White.copy(alpha = .4f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Text(initial, color = White, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold) }
+
+        Spacer(Modifier.height(16.dp))
+        TextField(
+            value = name,
+            onValueChange = { if (it.length <= 24) onName(it) },
+            singleLine = true,
+            label = { Text("Your name", color = Grey) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Surface, unfocusedContainerColor = Surface,
+                focusedTextColor = White, unfocusedTextColor = White, cursorColor = Red,
+                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent
+            ),
+            shape = RoundedCornerShape(16.dp)
+        )
+
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatCard("My List", myCount, Modifier.weight(1f), onMyList)
+            StatCard("Downloads", dlCount, Modifier.weight(1f), onDownloads)
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Column(
+            Modifier.padding(horizontal = 20.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp)).background(GlassBrush)
+                .border(1.dp, White.copy(alpha = .25f), RoundedCornerShape(20.dp))
+                .padding(18.dp)
+        ) {
+            Text("FREE PLAN", color = Red, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(4.dp))
+            Text("480p  •  up to 3 downloads", color = White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(16.dp))
+            Text("PREMIUM  •  ₹99 / month", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(4.dp))
+            Text("720p to 1080p  •  unlimited downloads", color = White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(14.dp))
+            Box(
+                Modifier.clip(RoundedCornerShape(22.dp)).background(RedBrush)
+                    .clickable {
+                        Toast.makeText(context, "Premium payments are not live yet", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 22.dp, vertical = 11.dp)
+            ) { Text("Get Premium", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun StatCard(label: String, count: Int, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(18.dp)).background(GlassBrush)
+            .border(1.dp, White.copy(alpha = .25f), RoundedCornerShape(18.dp))
+            .clickable { onClick() }.padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("$count", color = White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+        Text(label, color = Grey, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun PlaybackScreen(
+    quality: String, onQuality: (String) -> Unit,
+    autoplay: Boolean, onAutoplay: (Boolean) -> Unit,
+    wifiOnly: Boolean, onWifiOnly: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        ScreenTop("Playback", onBack)
+        Text(
+            "Video quality", color = White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+        Row(
+            Modifier.padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Auto", "480p", "720p", "1080p").forEach { opt ->
+                val premium = opt == "720p" || opt == "1080p"
+                val on = quality == opt
+                Row(
+                    Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(if (on) RedBrush else GlassBrush)
+                        .border(1.dp, if (on) Color.Transparent else White.copy(alpha = .28f), RoundedCornerShape(20.dp))
+                        .clickable {
+                            if (premium) Toast.makeText(context, "$opt is a Premium feature", Toast.LENGTH_SHORT).show()
+                            else onQuality(opt)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(opt, color = White, fontSize = 12.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium)
+                    if (premium) {
+                        Spacer(Modifier.width(5.dp))
+                        Text("PRO", color = Gold, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        ToggleRow("Autoplay next episode", "Start the next episode automatically", autoplay, onAutoplay)
+        ToggleRow("Stream on Wi-Fi only", "Don't use mobile data for video", wifiOnly, onWifiOnly)
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(3.dp))
+            Text(subtitle, color = Grey, fontSize = 11.sp)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = Red, checkedThumbColor = White,
+                uncheckedTrackColor = Surface2, uncheckedThumbColor = Grey,
+                uncheckedBorderColor = Color.Transparent
+            )
+        )
+    }
+}
+
+@Composable
+private fun AboutScreen(version: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var pending by remember { mutableStateOf<UpdateInfo?>(null) }
+
+    Column(Modifier.fillMaxSize()) {
+        ScreenTop("About Streamify", onBack)
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painterResource(R.drawable.streamify_logo), "Streamify",
+                modifier = Modifier.height(96.dp).width(230.dp),
+                contentScale = ContentScale.Fit
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("Version $version", color = Grey, fontSize = 13.sp)
+            Spacer(Modifier.height(22.dp))
+            Row(
+                Modifier.clip(RoundedCornerShape(24.dp)).background(RedBrush)
+                    .clickable(enabled = !checking) {
+                        scope.launch {
+                            checking = true
+                            status = null
+                            val latest = fetchLatestUpdate()
+                            checking = false
+                            when {
+                                latest == null -> status = "Couldn't check right now. Try again later."
+                                latest.code > installedVersionCode(context) -> pending = latest
+                                else -> status = "You are on the latest version."
+                            }
+                        }
+                    }
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (checking) {
+                    CircularProgressIndicator(color = White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Check for updates", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+            status?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(it, color = Grey, fontSize = 12.sp)
+            }
+            Spacer(Modifier.height(36.dp))
+            Text(
+                "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                color = Grey, fontSize = 10.sp, lineHeight = 15.sp
+            )
+        }
+    }
+    pending?.let { UpdateDialog(it) { pending = null } }
 }
 
 @Composable
