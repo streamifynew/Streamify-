@@ -107,6 +107,7 @@ private suspend fun loadContent(repo: TmdbRepository, c: HomeCategory, s: SubCat
             else -> repo.getMovies()
         }
         HomeCategory.TV -> when (s) {
+            SubCategory.WEB_SERIES -> repo.getWebSeries()
             SubCategory.BOLLYWOOD_SERIES -> repo.getBollywoodSeries()
             SubCategory.TV_SHOWS -> repo.getEnglishTvShows()
             else -> repo.getTvShows()
