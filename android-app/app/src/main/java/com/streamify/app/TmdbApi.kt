@@ -28,7 +28,10 @@ interface TmdbApi {
         @Query("page") page: Int = 1,
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("with_genres") genres: String? = null,
-        @Query("with_original_language") language: String? = null
+        @Query("with_original_language") language: String? = null,
+        @Query("primary_release_date.gte") releaseFrom: String? = null,
+        @Query("primary_release_date.lte") releaseTo: String? = null,
+        @Query("vote_count.gte") minVotes: Int? = null
     ): TmdbResponse
 
     @GET("discover/tv")
@@ -39,7 +42,10 @@ interface TmdbApi {
         @Query("with_genres") genres: String? = null,
         @Query("with_original_language") language: String? = null,
         @Query("with_networks") networks: String? = null,
-        @Query("without_genres") withoutGenres: String? = null
+        @Query("without_genres") withoutGenres: String? = null,
+        @Query("first_air_date.gte") airFrom: String? = null,
+        @Query("first_air_date.lte") airTo: String? = null,
+        @Query("vote_count.gte") minVotes: Int? = null
     ): TmdbResponse
 
     // ============================================================
