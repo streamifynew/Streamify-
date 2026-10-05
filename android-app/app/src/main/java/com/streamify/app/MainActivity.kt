@@ -136,7 +136,9 @@ private fun StreamifyApp() {
     var myList by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
     var downloads by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
 
-    BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
+    BackHandler(enabled = screen != Screen.HOME || category != HomeCategory.TRENDING) {
+        if (screen != Screen.HOME) screen = Screen.HOME else category = HomeCategory.TRENDING
+    }
     val open: (TmdbItem) -> Unit = { selected = it; screen = Screen.DETAIL }
     val showBar = screen == Screen.HOME || screen == Screen.MY_LIST ||
         screen == Screen.DOWNLOADS || screen == Screen.SETTINGS
