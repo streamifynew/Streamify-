@@ -7,6 +7,9 @@ on:
       - "android-app/**"
       - ".github/workflows/android-apk.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,11 +33,23 @@ jobs:
         run: |
           gradle :app:assembleDebug \
             -PTMDB_API_KEY="${{ secrets.TMDB_API_KEY }}" \
+            -PVERSION_CODE="${{ github.run_number }}" \
             --stacktrace
         working-directory: android-app
+
+      - name: Rename APK
+        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk streamify.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: streamify-debug-apk
-          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          path: streamify.apk
+
+      - name: Publish release (the app reads this to find updates)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Streamify build ${{ github.run_number }}
+          files: streamify.apk
+          make_latest: true
