@@ -37,7 +37,9 @@ interface TmdbApi {
         @Query("page") page: Int = 1,
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("with_genres") genres: String? = null,
-        @Query("with_original_language") language: String? = null
+        @Query("with_original_language") language: String? = null,
+        @Query("with_networks") networks: String? = null,
+        @Query("without_genres") withoutGenres: String? = null
     ): TmdbResponse
 
     // ============================================================
