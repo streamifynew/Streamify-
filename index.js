@@ -6,6 +6,11 @@ import 'dotenv/config';
 const app = express();
 app.use(express.json());
 
+// Health check route for Render
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'OK' });
+});
+
 // Helper function to search links across providers
 async function searchAllProviders(query) {
     let results = [];
