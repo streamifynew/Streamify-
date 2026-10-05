@@ -3,6 +3,7 @@ package com.streamify.app
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Url
 
 interface TmdbApi {
 
@@ -79,6 +80,15 @@ interface TmdbApi {
         @Path("tv_id") tvId: Int,
         @Query("api_key") apiKey: String
     ): TmdbResponse
+
+    // ============================================================
+    // STREAMIFY SCRAPER BACKEND
+    // ============================================================
+    @GET
+    suspend fun getStreamingSources(
+        @Url fullUrl: String,
+        @Query("q") query: String
+    ): ScraperResponse
 }
 
 data class TmdbResponse(
@@ -112,4 +122,18 @@ data class TmdbItem(
 data class TmdbGenre(
     val id: Int = 0,
     val name: String = ""
+)
+
+data class ScraperResponse(
+    val query: String,
+    val totalSources: Int,
+    val resources: List<StreamingSource> = emptyList()
+)
+
+data class StreamingSource(
+    val source: String,
+    val title: String,
+    val url: String,
+    val quality: String,
+    val size: String
 )
