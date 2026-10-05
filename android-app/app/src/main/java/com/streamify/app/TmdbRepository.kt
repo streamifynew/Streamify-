@@ -108,24 +108,84 @@ class TmdbRepository {
     }
 
     // Web Series
+    // Originals from streaming platforms (Netflix, Prime Video, Disney+, Apple TV+,
+    // Hulu, HBO/Max, Disney+ Hotstar), without daily soaps and talk shows.
     suspend fun getWebSeries(): List<TmdbItem> {
 
-        return api.discoverTv(
-            apiKey = apiKey
-        ).results.map {
+        var shows = api.discoverTv(
+            apiKey = apiKey,
+            networks = WEB_NETWORKS,
+            withoutGenres = GENRE_SOAP
+        ).results.filter { it.isShowable() }
+
+        // second page, so the grid has plenty of titles
+        if (shows.size < 18) {
+            val more = api.discoverTv(
+                apiKey = apiKey,
+                page = 2,
+                networks = WEB_NETWORKS,
+                withoutGenres = GENRE_SOAP
+            ).results.filter { it.isShowable() }
+
+            shows = (shows + more).distinctBy { it.id }
+        }
+
+        return shows.map {
             it.copy(media_type = "tv")
         }
     }
 
     // Bollywood Series
+    // Hindi web series from OTT platforms (Netflix, Prime Video, Disney+ Hotstar),
+    // no daily soap serials, with some Hindi reality shows mixed in.
     suspend fun getBollywoodSeries(): List<TmdbItem> {
 
-        return api.discoverTv(
+        var webSeries = api.discoverTv(
             apiKey = apiKey,
-            language = "hi"
-        ).results.map {
-            it.copy(media_type = "tv")
+            language = "hi",
+            networks = OTT_NETWORKS,
+            withoutGenres = GENRE_SOAP
+        ).results.filter { it.isShowable() }
+
+        // fallback: if the OTT filter returns too little, use Hindi shows without soaps
+        if (webSeries.size < 6) {
+            val extra = api.discoverTv(
+                apiKey = apiKey,
+                language = "hi",
+                withoutGenres = GENRE_SOAP
+            ).results.filter { it.isShowable() }
+
+            webSeries = (webSeries + extra).distinctBy { it.id }
         }
+
+        val reality = api.discoverTv(
+            apiKey = apiKey,
+            genres = GENRE_REALITY,
+            language = "hi"
+        ).results.filter { it.isShowable() }
+
+        // after every 3 web series, add 1 reality show
+        val mixed = mutableListOf<TmdbItem>()
+        var r = 0
+
+        webSeries.forEachIndexed { index, item ->
+            mixed.add(item)
+            if (index % 3 == 2 && r < reality.size) {
+                mixed.add(reality[r])
+                r++
+            }
+        }
+
+        while (r < reality.size) {
+            mixed.add(reality[r])
+            r++
+        }
+
+        return mixed
+            .distinctBy { it.id }
+            .map {
+                it.copy(media_type = "tv")
+            }
     }
 
     // TV Shows
@@ -360,12 +420,29 @@ class TmdbRepository {
             }
         }
     }
+
+    private companion object {
+        // TMDB network ids: Netflix, Amazon Prime Video, Disney+ Hotstar
+        const val OTT_NETWORKS = "213|1024|3919"
+
+        // Netflix, Prime Video, Disney+, Apple TV+, Hulu, HBO, Max, Disney+ Hotstar
+        const val WEB_NETWORKS = "213|1024|2739|2552|453|49|3186|3919"
+
+        // TMDB genre ids
+        const val GENRE_SOAP = "10766"
+        const val GENRE_REALITY = "10764"
+    }
 }
 
 // ============================================================
-// HELPER
+// HELPERS
 // ============================================================
 
 private fun TmdbItem.popularityScore(): Double {
     return vote_average ?: 0.0
+}
+
+// hide unreleased / empty entries (no poster or no rating)
+private fun TmdbItem.isShowable(): Boolean {
+    return poster_path != null && (vote_average ?: 0.0) > 0.0
 }
