@@ -136,4 +136,4 @@ data class StreamingSource(
     val url: String,
     val quality: String,
     val size: String
-)
+)  
