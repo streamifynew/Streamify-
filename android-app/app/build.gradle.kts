@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// every GitHub build gets a higher number, so the app can tell when a newer build exists
+val appVersionCode: Int =
+    (project.findProperty("VERSION_CODE") as String?)?.toIntOrNull() ?: 1
+
 android {
     namespace = "com.streamify.app"
     compileSdk = 35
@@ -12,14 +16,30 @@ android {
         applicationId = "com.streamify.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = "0.1.$appVersionCode"
 
         buildConfigField(
             "String",
             "TMDB_API_KEY",
             "\"${project.findProperty("TMDB_API_KEY") ?: ""}\""
         )
+    }
+
+    // the same key for every build, so a new APK installs over the old app
+    signingConfigs {
+        create("streamify") {
+            storeFile = file("streamify.keystore")
+            storePassword = "streamify123"
+            keyAlias = "streamify"
+            keyPassword = "streamify123"
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("streamify")
+        }
     }
 
     buildFeatures {
