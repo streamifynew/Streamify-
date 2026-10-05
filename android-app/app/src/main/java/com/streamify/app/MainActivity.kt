@@ -1,6 +1,14 @@
 package com.streamify.app
 
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import androidx.core.content.FileProvider
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -35,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,8 +51,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 private const val TMDB_IMAGE = "https://image.tmdb.org/t/p/"
 
@@ -167,6 +183,191 @@ private fun genreSpec(base: BrowseSpec, def: GenreDef, sub: SubCategory): Browse
     return spec
 }
 
+// ============================================================
+// IN-APP UPDATE: checks GitHub Releases, downloads the new APK, opens the installer
+// ============================================================
+
+private const val UPDATE_URL = "https://api.github.com/repos/streamifynew/Streamify-/releases/latest"
+
+private data class UpdateInfo(val code: Int, val url: String)
+
+private suspend fun fetchLatestUpdate(): UpdateInfo? = withContext(Dispatchers.IO) {
+    try {
+        val conn = URL(UPDATE_URL).openConnection() as HttpURLConnection
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.setRequestProperty("User-Agent", "Streamify-App")
+        conn.connectTimeout = 10000
+        conn.readTimeout = 10000
+        val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+        val code = json.getString("tag_name").substringAfterLast("-").toIntOrNull()
+        val assets = json.getJSONArray("assets")
+        var url: String? = null
+        for (i in 0 until assets.length()) {
+            val a = assets.getJSONObject(i)
+            if (a.getString("name").endsWith(".apk")) url = a.getString("browser_download_url")
+        }
+        if (code != null && url != null) UpdateInfo(code, url) else null
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private suspend fun downloadApk(context: Context, url: String, onProgress: (Float) -> Unit): File =
+    withContext(Dispatchers.IO) {
+        val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+        val file = File(dir, "streamify.apk")
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 15000
+        conn.readTimeout = 30000
+        conn.connect()
+        val total = conn.contentLength.toLong()
+        conn.inputStream.use { input ->
+            file.outputStream().use { out ->
+                val buf = ByteArray(16 * 1024)
+                var done = 0L
+                while (true) {
+                    val n = input.read(buf)
+                    if (n == -1) break
+                    out.write(buf, 0, n)
+                    done += n
+                    if (total > 0) onProgress(done.toFloat() / total)
+                }
+            }
+        }
+        file
+    }
+
+// returns false when Android first needs the "install unknown apps" permission
+private fun installApk(context: Context, file: File): Boolean {
+    if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
+        context.startActivity(
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        return false
+    }
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    context.startActivity(
+        Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
+    return true
+}
+
+@Composable
+private fun UpdatePrompt() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var update by remember { mutableStateOf<UpdateInfo?>(null) }
+    var dismissed by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<Float?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val installed = try {
+            PackageInfoCompat.getLongVersionCode(
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            ).toInt()
+        } catch (_: Exception) { Int.MAX_VALUE }
+        val latest = fetchLatestUpdate()
+        if (latest != null && latest.code > installed) update = latest
+    }
+
+    val info = update
+    if (info != null && !dismissed) {
+        val p = progress
+        AlertDialog(
+            onDismissRequest = { if (p == null) dismissed = true },
+            containerColor = Color(0xFF1A0B0E),
+            shape = RoundedCornerShape(24.dp),
+            title = { Text("New version available", color = White, fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column {
+                    Text(
+                        message ?: "A newer Streamify is ready. The update takes only a few seconds.",
+                        color = Grey, fontSize = 13.sp
+                    )
+                    if (p != null) {
+                        Spacer(Modifier.height(14.dp))
+                        LinearProgressIndicator(
+                            progress = { p },
+                            color = Red,
+                            trackColor = White.copy(alpha = .12f),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = p == null,
+                    onClick = {
+                        scope.launch {
+                            message = null
+                            progress = 0f
+                            try {
+                                val file = downloadApk(context, info.url) { progress = it }
+                                progress = null
+                                if (installApk(context, file)) dismissed = true
+                                else message = "Allow \"Install unknown apps\" for Streamify, then tap Update now again."
+                            } catch (_: Exception) {
+                                progress = null
+                                message = "Download failed. Check your internet and try again."
+                            }
+                        }
+                    }
+                ) { Text("Update now", color = Red, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(enabled = p == null, onClick = { dismissed = true }) {
+                    Text("Later", color = Grey)
+                }
+            }
+        )
+    }
+}
+
+// My List / Downloads are kept on the phone, so they survive closing the app
+private fun saveItems(prefs: SharedPreferences, key: String, items: List<TmdbItem>) {
+    val arr = JSONArray()
+    items.forEach {
+        arr.put(
+            JSONObject().apply {
+                put("id", it.id)
+                put("type", it.media_type ?: "movie")
+                put("title", it.title ?: "")
+                put("name", it.name ?: "")
+                put("poster", it.poster_path ?: "")
+                put("backdrop", it.backdrop_path ?: "")
+                put("overview", it.overview ?: "")
+                put("vote", it.vote_average ?: 0.0)
+            }
+        )
+    }
+    prefs.edit().putString(key, arr.toString()).apply()
+}
+
+private fun loadItems(prefs: SharedPreferences, key: String): List<TmdbItem> =
+    try {
+        val arr = JSONArray(prefs.getString(key, "[]") ?: "[]")
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            TmdbItem(
+                id = o.optInt("id"),
+                media_type = o.optString("type").ifEmpty { null },
+                title = o.optString("title").ifEmpty { null },
+                name = o.optString("name").ifEmpty { null },
+                poster_path = o.optString("poster").ifEmpty { null },
+                backdrop_path = o.optString("backdrop").ifEmpty { null },
+                overview = o.optString("overview").ifEmpty { null },
+                vote_average = o.optDouble("vote", 0.0)
+            )
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
 private fun List<TmdbItem>.containsSame(item: TmdbItem) = any { it.sameAs(item) }
 private fun TmdbItem.sameAs(o: TmdbItem) = id == o.id && media_type == o.media_type
 
@@ -177,8 +378,10 @@ private fun StreamifyApp() {
     var sub by remember { mutableStateOf(SubCategory.ALL) }
     var seeAll by remember { mutableStateOf<SeeAllReq?>(null) }
     var selected by remember { mutableStateOf<TmdbItem?>(null) }
-    var myList by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
-    var downloads by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("streamify", Context.MODE_PRIVATE) }
+    var myList by remember { mutableStateOf(loadItems(prefs, "my_list")) }
+    var downloads by remember { mutableStateOf(loadItems(prefs, "downloads")) }
     val homeList = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -189,6 +392,8 @@ private fun StreamifyApp() {
     val open: (TmdbItem) -> Unit = { selected = it; screen = Screen.DETAIL }
     val showBar = screen == Screen.HOME || screen == Screen.MY_LIST ||
         screen == Screen.DOWNLOADS || screen == Screen.SETTINGS
+
+    UpdatePrompt()
 
     Column(
         Modifier.fillMaxSize()
@@ -215,9 +420,17 @@ private fun StreamifyApp() {
                         inList = myList.containsSame(item),
                         onBack = { screen = Screen.HOME },
                         onToggleList = {
-                            myList = if (myList.containsSame(item)) myList.filterNot { it.sameAs(item) } else myList + item
+                            val updated =
+                                if (myList.containsSame(item)) myList.filterNot { it.sameAs(item) } else myList + item
+                            myList = updated
+                            saveItems(prefs, "my_list", updated)
                         },
-                        onDownload = { if (!downloads.containsSame(item)) downloads = downloads + item },
+                        onDownload = {
+                            if (!downloads.containsSame(item)) {
+                                downloads = downloads + item
+                                saveItems(prefs, "downloads", downloads)
+                            }
+                        },
                         onOpenSimilar = { selected = it }
                     )
                 }
