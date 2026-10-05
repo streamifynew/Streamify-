@@ -53,3 +53,4 @@ jobs:
           name: Streamify build ${{ github.run_number }}
           files: streamify.apk
           make_latest: true
+  
