@@ -10,6 +10,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -61,7 +65,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { HOME, SEARCH, DETAIL, MY_LIST, DOWNLOADS, SETTINGS }
+private enum class Screen { HOME, SEARCH, DETAIL, MY_LIST, DOWNLOADS, SETTINGS, SEE_ALL }
+
+private data class SeeAllReq(val title: String, val spec: BrowseSpec)
 
 private enum class HomeCategory(val label: String, val icon: ImageVector) {
     TRENDING("Trending", Icons.Outlined.LocalFireDepartment),
@@ -96,34 +102,70 @@ private fun subcategories(c: HomeCategory): List<SubCategory> = when (c) {
     )
 }
 
-private suspend fun loadContent(repo: TmdbRepository, c: HomeCategory, s: SubCategory): List<TmdbItem> =
-    when (c) {
-        HomeCategory.TRENDING -> repo.getTrending()
-        HomeCategory.MOVIES -> when (s) {
-            SubCategory.HOLLYWOOD -> repo.getHollywoodMovies()
-            SubCategory.BOLLYWOOD -> repo.getBollywoodMovies()
-            SubCategory.SOUTH -> repo.getSouthMovies()
-            SubCategory.MULTI_AUDIO, SubCategory.HINDI_DUBBED -> emptyList()
-            else -> repo.getMovies()
-        }
-        HomeCategory.TV -> when (s) {
-            SubCategory.WEB_SERIES -> repo.getWebSeries()
-            SubCategory.BOLLYWOOD_SERIES -> repo.getBollywoodSeries()
-            SubCategory.TV_SHOWS -> repo.getEnglishTvShows()
-            else -> repo.getTvShows()
-        }
-        HomeCategory.DRAMA -> when (s) {
-            SubCategory.KDRAMA -> repo.getKDrama()
-            SubCategory.TURKISH -> repo.getTurkishDrama()
-            SubCategory.PAKISTANI -> repo.getPakistaniDrama()
-            else -> repo.getDrama()
-        }
-        HomeCategory.ANIME -> when (s) {
-            SubCategory.ANIMATED -> repo.getAnimatedContent()
-            SubCategory.CARTOON -> repo.getCartoonShows()
-            else -> repo.getAnime()
-        }
+private const val WEB_NETWORKS = "213|1024|2739|2552|453|49|3186"
+
+// what each category / sub-category loads (null = nothing to load yet)
+private fun baseSpec(c: HomeCategory, s: SubCategory): BrowseSpec? = when (c) {
+    HomeCategory.TRENDING -> null
+    HomeCategory.MOVIES -> when (s) {
+        SubCategory.HOLLYWOOD -> BrowseSpec(movie = true, languages = listOf("en"))
+        SubCategory.BOLLYWOOD -> BrowseSpec(movie = true, languages = listOf("hi"))
+        SubCategory.SOUTH -> BrowseSpec(movie = true, languages = listOf("ta", "te", "ml", "kn"))
+        SubCategory.MULTI_AUDIO, SubCategory.HINDI_DUBBED -> null
+        else -> BrowseSpec(movie = true)
     }
+    HomeCategory.TV -> when (s) {
+        SubCategory.WEB_SERIES -> BrowseSpec(tv = true, networks = WEB_NETWORKS, withoutGenres = "10766")
+        SubCategory.BOLLYWOOD_SERIES -> BrowseSpec(tv = true, languages = listOf("hi"), networks = "213|1024", withoutGenres = "10766")
+        SubCategory.TV_SHOWS -> BrowseSpec(tv = true, languages = listOf("en"))
+        else -> BrowseSpec(tv = true)
+    }
+    HomeCategory.DRAMA -> when (s) {
+        SubCategory.KDRAMA -> BrowseSpec(tv = true, languages = listOf("ko"), tvGenre = "18")
+        SubCategory.TURKISH -> BrowseSpec(tv = true, languages = listOf("tr"), tvGenre = "18")
+        SubCategory.PAKISTANI -> BrowseSpec(tv = true, languages = listOf("ur"), tvGenre = "18")
+        else -> BrowseSpec(movie = true, tv = true, movieGenre = "18", tvGenre = "18")
+    }
+    HomeCategory.ANIME -> when (s) {
+        SubCategory.ANIMATED -> BrowseSpec(movie = true, tv = true, movieGenre = "16", tvGenre = "16")
+        SubCategory.CARTOON -> BrowseSpec(tv = true, languages = listOf("en"), tvGenre = "16")
+        else -> BrowseSpec(movie = true, tv = true, languages = listOf("ja"), movieGenre = "16", tvGenre = "16")
+    }
+}
+
+private data class GenreDef(val label: String, val movie: String?, val tv: String?)
+
+private val GENRES = listOf(
+    GenreDef("Action", "28", "10759"),
+    GenreDef("Sci-Fi", "878", "10765"),
+    GenreDef("Comedy", "35", "35"),
+    GenreDef("Crime", "80", "80"),
+    GenreDef("Thriller & Mystery", "53", "9648"),
+    GenreDef("Romance", "10749", null),
+    GenreDef("Horror", "27", null),
+    GenreDef("Drama", "18", "18"),
+    GenreDef("Reality", null, "10764"),
+    GenreDef("Animation", "16", "16"),
+    GenreDef("Family", "10751", "10751")
+)
+
+// the same base list, narrowed to one genre (null = this genre doesn't fit here)
+private fun genreSpec(base: BrowseSpec, def: GenreDef, sub: SubCategory): BrowseSpec? {
+    val useMovie = base.movie && def.movie != null && def.movie != base.movieGenre
+    val useTv = base.tv && def.tv != null && def.tv != base.tvGenre
+    if (!useMovie && !useTv) return null
+    var spec = base.copy(
+        movie = useMovie,
+        tv = useTv,
+        movieGenre = if (useMovie) listOfNotNull(base.movieGenre, def.movie).joinToString(",") else null,
+        tvGenre = if (useTv) listOfNotNull(base.tvGenre, def.tv).joinToString(",") else null
+    )
+    // Bollywood Series: reality shows come from Hindi TV channels too
+    if (def.label == "Reality" && sub == SubCategory.BOLLYWOOD_SERIES) {
+        spec = spec.copy(networks = null, withoutGenres = null)
+    }
+    return spec
+}
 
 private fun List<TmdbItem>.containsSame(item: TmdbItem) = any { it.sameAs(item) }
 private fun TmdbItem.sameAs(o: TmdbItem) = id == o.id && media_type == o.media_type
@@ -132,13 +174,17 @@ private fun TmdbItem.sameAs(o: TmdbItem) = id == o.id && media_type == o.media_t
 private fun StreamifyApp() {
     var screen by remember { mutableStateOf(Screen.HOME) }
     var category by remember { mutableStateOf(HomeCategory.TRENDING) }
-    var homeTick by remember { mutableIntStateOf(0) }
+    var sub by remember { mutableStateOf(SubCategory.ALL) }
+    var seeAll by remember { mutableStateOf<SeeAllReq?>(null) }
     var selected by remember { mutableStateOf<TmdbItem?>(null) }
     var myList by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
     var downloads by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
+    val homeList = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     BackHandler(enabled = screen != Screen.HOME || category != HomeCategory.TRENDING) {
-        if (screen != Screen.HOME) screen = Screen.HOME else category = HomeCategory.TRENDING
+        if (screen != Screen.HOME) screen = Screen.HOME
+        else { category = HomeCategory.TRENDING; sub = SubCategory.ALL; scope.launch { homeList.scrollToItem(0) } }
     }
     val open: (TmdbItem) -> Unit = { selected = it; screen = Screen.DETAIL }
     val showBar = screen == Screen.HOME || screen == Screen.MY_LIST ||
@@ -151,8 +197,18 @@ private fun StreamifyApp() {
     ) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (screen) {
-                Screen.HOME -> HomeScreen(category, { category = it }, { screen = Screen.SEARCH }, open, homeTick)
+                Screen.HOME -> HomeScreen(
+                    category = category,
+                    sub = sub,
+                    onCategory = { category = it; sub = SubCategory.ALL; scope.launch { homeList.scrollToItem(0) } },
+                    onSub = { sub = it },
+                    onSearch = { screen = Screen.SEARCH },
+                    onOpen = open,
+                    onSeeAll = { t, sp -> seeAll = SeeAllReq(t, sp); screen = Screen.SEE_ALL },
+                    listState = homeList
+                )
                 Screen.SEARCH -> SearchScreen({ screen = Screen.HOME }, open)
+                Screen.SEE_ALL -> seeAll?.let { SeeAllScreen(it.title, it.spec, { screen = Screen.HOME }, open) }
                 Screen.DETAIL -> selected?.let { item ->
                     DetailScreen(
                         item = item,
@@ -173,7 +229,11 @@ private fun StreamifyApp() {
         if (showBar) {
             BottomBar(
                 selected = screen,
-                onHome = { category = HomeCategory.TRENDING; homeTick++; screen = Screen.HOME },
+                onHome = {
+                    category = HomeCategory.TRENDING; sub = SubCategory.ALL
+                    screen = Screen.HOME
+                    scope.launch { homeList.scrollToItem(0) }
+                },
                 onMyList = { screen = Screen.MY_LIST },
                 onDownloads = { screen = Screen.DOWNLOADS },
                 onSettings = { screen = Screen.SETTINGS }
@@ -186,33 +246,34 @@ private fun StreamifyApp() {
 @Composable
 private fun HomeScreen(
     category: HomeCategory,
+    sub: SubCategory,
     onCategory: (HomeCategory) -> Unit,
+    onSub: (SubCategory) -> Unit,
     onSearch: () -> Unit,
     onOpen: (TmdbItem) -> Unit,
-    resetTick: Int
+    onSeeAll: (String, BrowseSpec) -> Unit,
+    listState: LazyListState
 ) {
     val repo = remember { TmdbRepository() }
     val density = LocalDensity.current
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var headerH by remember { mutableStateOf(150.dp) }
     var trending by remember { mutableStateOf<List<TmdbItem>>(emptyList()) }
-    var sub by remember(category) { mutableStateOf(SubCategory.ALL) }
-    var gridItems by remember(category, sub) { mutableStateOf<List<TmdbItem>>(emptyList()) }
-    var gridLoading by remember(category, sub) { mutableStateOf(true) }
+    val base = remember(category, sub) { baseSpec(category, sub) }
+    var newItems by remember(category, sub) { mutableStateOf<List<TmdbItem>>(emptyList()) }
+    var newLoaded by remember(category, sub) { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { trending = try { repo.getTrending() } catch (_: Exception) { emptyList() } }
     LaunchedEffect(category, sub) {
-        if (category != HomeCategory.TRENDING) {
-            gridLoading = true
-            gridItems = try { loadContent(repo, category, sub) } catch (_: Exception) { emptyList() }
-            gridLoading = false
+        if (base != null) {
+            newItems = try { repo.browse(base.copy(newRelease = true), 1) } catch (_: Exception) { emptyList() }
         }
+        newLoaded = true
     }
-    LaunchedEffect(resetTick, category) { listState.scrollToItem(0) }
 
-    val hero = remember(trending, gridItems, category) {
-        (if (category == HomeCategory.TRENDING || gridItems.isEmpty()) trending else gridItems).take(5)
+    val heroIsNew = category != HomeCategory.TRENDING && newItems.size >= 3
+    val hero = remember(trending, newItems, category) {
+        (if (category != HomeCategory.TRENDING && newItems.size >= 3) newItems else trending).take(5)
     }
     val pagerState = rememberPagerState(pageCount = { hero.size })
     LaunchedEffect(hero) { if (hero.isNotEmpty()) pagerState.scrollToPage(0) }
@@ -227,7 +288,7 @@ private fun HomeScreen(
         LazyColumn(
             Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = PaddingValues(top = headerH, bottom = 16.dp)
+            contentPadding = PaddingValues(top = headerH, bottom = 24.dp)
         ) {
             item {
                 if (hero.isEmpty()) {
@@ -238,7 +299,7 @@ private fun HomeScreen(
                     ) { CircularProgressIndicator(color = Red, strokeWidth = 3.dp) }
                 } else {
                     HeroPager(
-                        hero, pagerState, onOpen,
+                        hero, pagerState, onOpen, if (heroIsNew) "NEW RELEASE" else "TRENDING",
                         onPrev = { scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1 + hero.size) % hero.size) } },
                         onNext = { scope.launch { pagerState.animateScrollToPage((pagerState.currentPage + 1) % hero.size) } }
                     )
@@ -249,31 +310,30 @@ private fun HomeScreen(
                     item(key = c.name) { CategorySection(c, onOpen) }
                 }
             } else {
-                item(key = "grid-header") { GridHeader(category, sub) { sub = it } }
-                if (gridLoading) {
-                    item(key = "grid-loading") {
-                        Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Red, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
-                        }
-                    }
-                } else if (gridItems.isEmpty()) {
-                    item(key = "grid-empty") {
+                item(key = "head-${category.name}") { GridHeader(category, sub, onSub) }
+                val where = if (sub == SubCategory.ALL) category.label else sub.label
+                if (base == null) {
+                    item(key = "soon") {
                         Text(
-                            if (sub == SubCategory.MULTI_AUDIO || sub == SubCategory.HINDI_DUBBED)
-                                "Connect your playback source metadata to show ${sub.label} titles."
-                            else "No content available.",
+                            "Connect your playback source metadata to show ${sub.label} titles.",
                             color = Grey, fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp)
                         )
                     }
                 } else {
-                    items(gridItems.chunked(3)) { row ->
-                        Row(
-                            Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(9.dp)
-                        ) {
-                            row.forEach { PosterCard(it, onOpen, null, Modifier.weight(1f).aspectRatio(0.68f)) }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    item(key = "new-${category.name}-${sub.name}") {
+                        GridBlock("New Releases", newItems, newLoaded, 9, "New", onOpen) {
+                            onSeeAll("New Releases  •  $where", base.copy(newRelease = true))
+                        }
+                    }
+                    GENRES.forEach { def ->
+                        val spec = genreSpec(base, def, sub)
+                        if (spec != null) {
+                            item(key = "g-${category.name}-${sub.name}-${def.label}") {
+                                SectionGrid(def.label, spec, 6, onOpen) {
+                                    onSeeAll("${def.label}  •  $where", spec)
+                                }
+                            }
                         }
                     }
                 }
@@ -301,7 +361,7 @@ private fun HomeScreen(
 
 @Composable
 private fun GridHeader(cat: HomeCategory, sub: SubCategory, onSub: (SubCategory) -> Unit) {
-    Column(Modifier.padding(top = 18.dp, bottom = 12.dp)) {
+    Column(Modifier.padding(top = 18.dp, bottom = 4.dp)) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(cat.icon, null, tint = Red, modifier = Modifier.size(26.dp))
             Spacer(Modifier.width(8.dp))
@@ -309,6 +369,147 @@ private fun GridHeader(cat: HomeCategory, sub: SubCategory, onSub: (SubCategory)
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.padding(horizontal = 14.dp)) { SubPills(subcategories(cat), sub, onSub) }
+    }
+}
+
+@Composable
+private fun PosterGridRow(row: List<TmdbItem>, tag: String?, onOpen: (TmdbItem) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        row.forEach { PosterCard(it, onOpen, tag, Modifier.weight(1f).aspectRatio(0.68f)) }
+        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+    }
+}
+
+// one genre block: loads its own titles, then fades in
+@Composable
+private fun SectionGrid(
+    title: String, spec: BrowseSpec, count: Int,
+    onOpen: (TmdbItem) -> Unit, onSeeAll: () -> Unit
+) {
+    val repo = remember { TmdbRepository() }
+    val first = remember(spec) { repo.cached(spec, 1) }
+    var items by remember(spec) { mutableStateOf(first ?: emptyList()) }
+    var loaded by remember(spec) { mutableStateOf(first != null) }
+    LaunchedEffect(spec) {
+        if (!loaded) {
+            items = try { repo.browse(spec, 1) } catch (_: Exception) { emptyList() }
+            loaded = true
+        }
+    }
+    GridBlock(title, items, loaded, count, null, onOpen, onSeeAll)
+}
+
+@Composable
+private fun GridBlock(
+    title: String, items: List<TmdbItem>, loaded: Boolean, count: Int, tag: String?,
+    onOpen: (TmdbItem) -> Unit, onSeeAll: () -> Unit
+) {
+    // a genre with nothing in it simply doesn't show up
+    if (loaded && items.isEmpty()) return
+
+    Column(Modifier.padding(top = 24.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(3.dp).height(18.dp).clip(RoundedCornerShape(2.dp)).background(RedBrush))
+            Spacer(Modifier.width(9.dp))
+            Text(
+                title, color = White, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            )
+            Row(
+                Modifier.clip(RoundedCornerShape(14.dp)).background(GlassBrush)
+                    .border(1.dp, White.copy(alpha = .25f), RoundedCornerShape(14.dp))
+                    .clickable { onSeeAll() }
+                    .padding(start = 11.dp, end = 5.dp, top = 5.dp, bottom = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("See all", color = White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Outlined.KeyboardArrowRight, null, tint = White, modifier = Modifier.size(14.dp))
+            }
+        }
+        if (!loaded) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                repeat(3) {
+                    Box(
+                        Modifier.weight(1f).aspectRatio(0.68f).clip(RoundedCornerShape(12.dp))
+                            .background(White.copy(alpha = .05f))
+                    )
+                }
+            }
+        }
+        AnimatedVisibility(visible = loaded, enter = fadeIn(tween(600))) {
+            Column {
+                items.take(count).chunked(3).forEach { PosterGridRow(it, tag, onOpen) }
+            }
+        }
+    }
+}
+
+// full list of one genre / new releases: keeps loading pages while you scroll
+@Composable
+private fun SeeAllScreen(
+    title: String, spec: BrowseSpec,
+    onBack: () -> Unit, onOpen: (TmdbItem) -> Unit
+) {
+    val repo = remember { TmdbRepository() }
+    val state = rememberLazyListState()
+    var shown by remember(spec) { mutableStateOf<List<TmdbItem>>(emptyList()) }
+    var page by remember(spec) { mutableIntStateOf(0) }
+    var loading by remember(spec) { mutableStateOf(false) }
+    var ended by remember(spec) { mutableStateOf(false) }
+
+    val nearEnd by remember {
+        derivedStateOf {
+            val info = state.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            last >= info.totalItemsCount - 3
+        }
+    }
+
+    LaunchedEffect(spec, page, nearEnd) {
+        if (!loading && !ended && (page == 0 || nearEnd)) {
+            loading = true
+            val next = try { repo.browse(spec, page + 1) } catch (_: Exception) { emptyList() }
+            if (next.isEmpty()) ended = true
+            else shown = (shown + next).distinctBy { "${it.media_type}-${it.id}" }
+            page += 1
+            loading = false
+        }
+    }
+
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "Back", tint = White) }
+            Text(
+                title, color = White, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            state = state,
+            contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp)
+        ) {
+            items(shown.chunked(3)) { PosterGridRow(it, null, onOpen) }
+            item {
+                if (loading) {
+                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Red, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -321,7 +522,10 @@ private fun CategorySection(cat: HomeCategory, onOpen: (TmdbItem) -> Unit) {
 
     LaunchedEffect(cat, sub) {
         loading = true
-        content = try { loadContent(repo, cat, sub) } catch (_: Exception) { emptyList() }
+        content = try {
+            if (cat == HomeCategory.TRENDING) repo.getTrending()
+            else baseSpec(cat, sub)?.let { repo.browse(it, 1) } ?: emptyList()
+        } catch (_: Exception) { emptyList() }
         loading = false
     }
 
@@ -392,7 +596,7 @@ private fun TopBar(onSearch: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HeroPager(
-    items: List<TmdbItem>, pagerState: PagerState, onOpen: (TmdbItem) -> Unit,
+    items: List<TmdbItem>, pagerState: PagerState, onOpen: (TmdbItem) -> Unit, tag: String,
     onPrev: () -> Unit, onNext: () -> Unit
 ) {
     Box(
@@ -401,7 +605,7 @@ private fun HeroPager(
             .border(1.dp, Red.copy(alpha = .6f), RoundedCornerShape(18.dp))
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            HeroSlide(items[page.coerceIn(0, items.lastIndex)], onOpen)
+            HeroSlide(items[page.coerceIn(0, items.lastIndex)], tag, onOpen)
         }
         Icon(
             Icons.Outlined.KeyboardArrowLeft, "Previous", tint = White,
@@ -427,7 +631,7 @@ private fun HeroPager(
 }
 
 @Composable
-private fun HeroSlide(item: TmdbItem, onOpen: (TmdbItem) -> Unit) {
+private fun HeroSlide(item: TmdbItem, tag: String, onOpen: (TmdbItem) -> Unit) {
     val title = item.title ?: item.name ?: "Untitled"
     Box(Modifier.fillMaxSize().clickable { onOpen(item) }) {
         AsyncImage(
@@ -441,7 +645,7 @@ private fun HeroSlide(item: TmdbItem, onOpen: (TmdbItem) -> Unit) {
         )
         Column(Modifier.align(Alignment.CenterStart).padding(start = 30.dp, end = 60.dp)) {
             Box(Modifier.clip(RoundedCornerShape(5.dp)).background(Red).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                Text("TRENDING", color = White, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
+                Text(tag, color = White, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
             }
             Spacer(Modifier.height(6.dp))
             Text(title, color = White, fontSize = 26.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
