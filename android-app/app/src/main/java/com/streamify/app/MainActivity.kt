@@ -1,13 +1,37 @@
 package com.streamify.app
 
+import android.app.Activity
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.PlayerView
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.activity.ComponentActivity
@@ -84,7 +108,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { HOME, SEARCH, DETAIL, MY_LIST, DOWNLOADS, SETTINGS, SEE_ALL, PROFILE, PLAYBACK, ABOUT }
+private enum class Screen { HOME, SEARCH, DETAIL, MY_LIST, DOWNLOADS, SETTINGS, SEE_ALL, PROFILE, PLAYBACK, ABOUT, PLAYER }
+
+private data class PlayReq(val item: TmdbItem)
 
 private data class SeeAllReq(val title: String, val spec: BrowseSpec)
 
@@ -340,6 +366,253 @@ private fun UpdatePrompt() {
     if (info != null && !dismissed) UpdateDialog(info) { dismissed = true }
 }
 
+// ============================================================
+// PLAYER
+// Asks fetchStreamingLinksForAnyMedia (TmdbRepository.kt) for the sources of a title,
+// reads the link out of each source automatically, and plays it:
+//   direct video links (.m3u8 / .mp4 ...) -> built-in player (tries the next source if one fails)
+//   web page links                         -> locked-down web player
+// ============================================================
+
+private data class Playable(val label: String, val url: String, val headers: Map<String, String>)
+
+// reads link / name / headers out of a source object, whatever its field names are
+private fun toPlayable(src: Any): Playable? {
+    var url: String? = null
+    val labels = mutableListOf<String>()
+    var headers: Map<String, String> = emptyMap()
+    for (f in src.javaClass.declaredFields) {
+        if (java.lang.reflect.Modifier.isStatic(f.modifiers)) continue
+        try {
+            f.isAccessible = true
+            val v = f.get(src) ?: continue
+            val text: String? = when (v) {
+                is String -> v
+                is Uri, is java.net.URL -> v.toString()
+                else -> null
+            }
+            when {
+                text != null && text.startsWith("http", ignoreCase = true) -> if (url == null) url = text
+                text != null -> if (text.isNotBlank() && text.length <= 32) labels += text
+                v is Map<*, *> -> {
+                    val m = v.entries
+                        .filter { it.key is String && it.value is String }
+                        .associate { it.key as String to it.value as String }
+                    if (m.isNotEmpty()) headers = m
+                }
+            }
+        } catch (_: Exception) { }
+    }
+    val u = url ?: return null
+    return Playable(labels.take(2).joinToString("  •  ").ifEmpty { "Source" }, u, headers)
+}
+
+private fun isDirectVideo(url: String): Boolean {
+    val lower = url.lowercase()
+    if (lower.contains(".m3u8")) return true
+    val path = lower.substringBefore("?").substringBefore("#")
+    return listOf(".mp4", ".mkv", ".webm", ".mov").any { path.endsWith(it) }
+}
+
+@Composable
+private fun PlayerScreen(req: PlayReq, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val repo = remember { TmdbRepository() }
+    var loading by remember(req) { mutableStateOf(true) }
+    var error by remember(req) { mutableStateOf<String?>(null) }
+    var playables by remember(req) { mutableStateOf<List<Playable>>(emptyList()) }
+    var index by remember(req) { mutableIntStateOf(0) }
+    var picker by remember { mutableStateOf(false) }
+    val title = req.item.title ?: req.item.name ?: ""
+
+    LaunchedEffect(req) {
+        loading = true
+        error = null
+        try {
+            val raw: List<Any> = with(repo) { fetchStreamingLinksForAnyMedia(req.item) }
+            playables = raw.mapNotNull { toPlayable(it) }.distinctBy { it.url }
+            if (playables.isEmpty()) error = "No playable source found for this title."
+        } catch (_: Exception) {
+            error = "Could not load sources. Check your internet and try again."
+        }
+        loading = false
+    }
+
+    // landscape + full screen while watching, back to normal afterwards
+    DisposableEffect(Unit) {
+        val oldOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        activity?.window?.let { w ->
+            val c = WindowInsetsControllerCompat(w, w.decorView)
+            c.hide(WindowInsetsCompat.Type.systemBars())
+            c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            activity?.requestedOrientation = oldOrientation
+            activity?.window?.let { w ->
+                WindowInsetsControllerCompat(w, w.decorView).show(WindowInsetsCompat.Type.systemBars())
+                w.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
+    BackHandler { onBack() }
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        val current = playables.getOrNull(index)
+        when {
+            loading -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Red, strokeWidth = 3.dp)
+                Spacer(Modifier.height(10.dp))
+                Text("Finding sources...", color = Grey, fontSize = 12.sp)
+            }
+            error != null || current == null -> Text(
+                error ?: "No playable source found for this title.",
+                color = White, fontSize = 14.sp, modifier = Modifier.align(Alignment.Center).padding(32.dp)
+            )
+            isDirectVideo(current.url) -> key(current.url) {
+                ExoPlayerView(current) {
+                    if (index < playables.lastIndex) index++
+                    else error = "This source could not be played. Try again later."
+                }
+            }
+            else -> key(current.url) { WebPlayer(current.url) }
+        }
+
+        Row(
+            Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.displayCutout).padding(10.dp)
+                .clip(RoundedCornerShape(22.dp)).background(Color.Black.copy(alpha = .45f))
+                .clickable { onBack() }.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.ArrowBack, "Back", tint = White, modifier = Modifier.size(20.dp))
+            if (title.isNotEmpty()) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    title, color = White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 260.dp)
+                )
+            }
+        }
+        if (playables.size > 1) {
+            Box(
+                Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.displayCutout).padding(10.dp)
+                    .clip(RoundedCornerShape(22.dp)).background(Color.Black.copy(alpha = .45f))
+                    .clickable { picker = true }.padding(horizontal = 14.dp, vertical = 9.dp)
+            ) { Text("Sources", color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+        }
+    }
+
+    if (picker) {
+        AlertDialog(
+            onDismissRequest = { picker = false },
+            containerColor = Color(0xFF1A0B0E),
+            shape = RoundedCornerShape(24.dp),
+            title = { Text("Choose a source", color = White, fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    playables.forEachIndexed { i, p ->
+                        TextButton(onClick = { index = i; error = null; picker = false }) {
+                            Text(
+                                "${p.label}${if (i == index) "   ✓" else ""}",
+                                color = if (i == index) Red else White
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { picker = false }) { Text("Close", color = Grey) } }
+        )
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun ExoPlayerView(src: Playable, onError: () -> Unit) {
+    val context = LocalContext.current
+    val onErr by rememberUpdatedState(onError)
+    val player = remember(src.url) {
+        val http = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36")
+            .setDefaultRequestProperties(src.headers)
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(http))
+            .build()
+            .apply {
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) { onErr() }
+                })
+                setMediaItem(MediaItem.fromUri(src.url))
+                prepare()
+                playWhenReady = true
+            }
+    }
+    DisposableEffect(player) {
+        val owner = context as? LifecycleOwner
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) player.pause()
+        }
+        owner?.lifecycle?.addObserver(observer)
+        onDispose {
+            owner?.lifecycle?.removeObserver(observer)
+            player.release()
+        }
+    }
+    AndroidView(
+        factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true } },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+@Composable
+private fun WebPlayer(url: String) {
+    val host = remember(url) { Uri.parse(url).host }
+    AndroidView(
+        factory = { ctx ->
+            val root = FrameLayout(ctx)
+            val web = WebView(ctx)
+            root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            var custom: View? = null
+            var customCallback: WebChromeClient.CustomViewCallback? = null
+
+            web.settings.javaScriptEnabled = true
+            web.settings.domStorageEnabled = true
+            web.settings.mediaPlaybackRequiresUserGesture = false
+            web.settings.setSupportMultipleWindows(false)
+            web.settings.javaScriptCanOpenWindowsAutomatically = false
+            web.setBackgroundColor(android.graphics.Color.BLACK)
+
+            // stay on the player's own site: redirects/ads to other sites are blocked
+            web.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                    request.isForMainFrame && request.url.host != host
+            }
+            web.webChromeClient = object : WebChromeClient() {
+                override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                    custom = view
+                    customCallback = callback
+                    web.visibility = View.GONE
+                    root.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                }
+
+                override fun onHideCustomView() {
+                    custom?.let { root.removeView(it) }
+                    custom = null
+                    customCallback?.onCustomViewHidden()
+                    customCallback = null
+                    web.visibility = View.VISIBLE
+                }
+            }
+            web.loadUrl(url)
+            root
+        },
+        onRelease = { root -> (root.getChildAt(0) as? WebView)?.destroy() },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
 // My List / Downloads are kept on the phone, so they survive closing the app
 private fun saveItems(prefs: SharedPreferences, key: String, items: List<TmdbItem>) {
     val arr = JSONArray()
@@ -399,6 +672,7 @@ private fun StreamifyApp() {
     var autoplay by remember { mutableStateOf(prefs.getBoolean("autoplay", true)) }
     var wifiOnly by remember { mutableStateOf(prefs.getBoolean("wifi_only", false)) }
     var profileBack by remember { mutableStateOf(Screen.HOME) }
+    var playReq by remember { mutableStateOf<PlayReq?>(null) }
     val homeList = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val version = remember { appVersionName(context) }
@@ -407,6 +681,7 @@ private fun StreamifyApp() {
         screen = when (screen) {
             Screen.PLAYBACK, Screen.ABOUT -> Screen.SETTINGS
             Screen.PROFILE -> profileBack
+            Screen.PLAYER -> Screen.DETAIL
             else -> Screen.HOME
         }
     }
@@ -415,7 +690,7 @@ private fun StreamifyApp() {
         else { category = HomeCategory.TRENDING; sub = SubCategory.ALL; scope.launch { homeList.scrollToItem(0) } }
     }
     val open: (TmdbItem) -> Unit = { selected = it; screen = Screen.DETAIL }
-    val showBar = screen != Screen.DETAIL && screen != Screen.SEARCH && screen != Screen.SEE_ALL
+    val showBar = screen != Screen.DETAIL && screen != Screen.SEARCH && screen != Screen.SEE_ALL && screen != Screen.PLAYER
 
     UpdatePrompt()
 
@@ -433,6 +708,7 @@ private fun StreamifyApp() {
                     onSub = { sub = it },
                     onSearch = { screen = Screen.SEARCH },
                     onProfile = { profileBack = Screen.HOME; screen = Screen.PROFILE },
+                    onPlay = { selected = it; playReq = PlayReq(it); screen = Screen.PLAYER },
                     onOpen = open,
                     onSeeAll = { t, sp -> seeAll = SeeAllReq(t, sp); screen = Screen.SEE_ALL },
                     listState = homeList
@@ -456,9 +732,11 @@ private fun StreamifyApp() {
                                 saveItems(prefs, "downloads", downloads)
                             }
                         },
-                        onOpenSimilar = { selected = it }
+                        onOpenSimilar = { selected = it },
+                        onPlay = { playReq = PlayReq(item); screen = Screen.PLAYER }
                     )
                 }
+                Screen.PLAYER -> playReq?.let { PlayerScreen(it) { screen = Screen.DETAIL } }
                 Screen.MY_LIST -> CollectionScreen("My List", myList, "Your watchlist is empty.", { screen = Screen.HOME }, open)
                 Screen.DOWNLOADS -> CollectionScreen("Downloads", downloads, "No downloads yet.", { screen = Screen.HOME }, open)
                 Screen.SETTINGS -> SettingsScreen(
@@ -519,6 +797,7 @@ private fun HomeScreen(
     onSub: (SubCategory) -> Unit,
     onSearch: () -> Unit,
     onProfile: () -> Unit,
+    onPlay: (TmdbItem) -> Unit,
     onOpen: (TmdbItem) -> Unit,
     onSeeAll: (String, BrowseSpec) -> Unit,
     listState: LazyListState
@@ -568,7 +847,7 @@ private fun HomeScreen(
                     ) { CircularProgressIndicator(color = Red, strokeWidth = 3.dp) }
                 } else {
                     HeroPager(
-                        hero, pagerState, onOpen, if (heroIsNew) "NEW RELEASE" else "TRENDING",
+                        hero, pagerState, onOpen, if (heroIsNew) "NEW RELEASE" else "TRENDING", onPlay,
                         onPrev = { scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1 + hero.size) % hero.size) } },
                         onNext = { scope.launch { pagerState.animateScrollToPage((pagerState.currentPage + 1) % hero.size) } }
                     )
@@ -867,6 +1146,7 @@ private fun TopBar(onSearch: () -> Unit, onProfile: () -> Unit) {
 @Composable
 private fun HeroPager(
     items: List<TmdbItem>, pagerState: PagerState, onOpen: (TmdbItem) -> Unit, tag: String,
+    onPlay: (TmdbItem) -> Unit,
     onPrev: () -> Unit, onNext: () -> Unit
 ) {
     Box(
@@ -875,7 +1155,7 @@ private fun HeroPager(
             .border(1.dp, Red.copy(alpha = .6f), RoundedCornerShape(18.dp))
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            HeroSlide(items[page.coerceIn(0, items.lastIndex)], tag, onOpen)
+            HeroSlide(items[page.coerceIn(0, items.lastIndex)], tag, onOpen, onPlay)
         }
         Icon(
             Icons.Outlined.KeyboardArrowLeft, "Previous", tint = White,
@@ -901,7 +1181,7 @@ private fun HeroPager(
 }
 
 @Composable
-private fun HeroSlide(item: TmdbItem, tag: String, onOpen: (TmdbItem) -> Unit) {
+private fun HeroSlide(item: TmdbItem, tag: String, onOpen: (TmdbItem) -> Unit, onPlay: (TmdbItem) -> Unit) {
     val title = item.title ?: item.name ?: "Untitled"
     Box(Modifier.fillMaxSize().clickable { onOpen(item) }) {
         AsyncImage(
@@ -927,7 +1207,7 @@ private fun HeroSlide(item: TmdbItem, tag: String, onOpen: (TmdbItem) -> Unit) {
             Spacer(Modifier.height(10.dp))
             Row(
                 Modifier.clip(RoundedCornerShape(20.dp)).background(RedBrush)
-                    .clickable { onOpen(item) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                    .clickable { onPlay(item) }.padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Outlined.PlayArrow, null, tint = White, modifier = Modifier.size(17.dp))
@@ -1100,7 +1380,7 @@ private fun ListRow(item: TmdbItem, onOpen: (TmdbItem) -> Unit) {
 @Composable
 private fun DetailScreen(
     item: TmdbItem, inList: Boolean, onBack: () -> Unit, onToggleList: () -> Unit,
-    onDownload: () -> Unit, onOpenSimilar: (TmdbItem) -> Unit
+    onDownload: () -> Unit, onOpenSimilar: (TmdbItem) -> Unit, onPlay: () -> Unit
 ) {
     val repo = remember { TmdbRepository() }
     var details by remember { mutableStateOf(item) }
@@ -1125,7 +1405,8 @@ private fun DetailScreen(
                 }
                 Box(
                     Modifier.align(Alignment.Center).size(58.dp).clip(CircleShape)
-                        .background(Black.copy(alpha = .5f)).border(2.dp, White, CircleShape),
+                        .background(Black.copy(alpha = .5f)).border(2.dp, White, CircleShape)
+                        .clickable { onPlay() },
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Outlined.PlayArrow, "Play", tint = White, modifier = Modifier.size(34.dp)) }
             }
@@ -1149,7 +1430,7 @@ private fun DetailScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(
                         Modifier.weight(1f).height(46.dp).clip(RoundedCornerShape(24.dp)).background(RedBrush)
-                            .clickable { /* PLAYBACK SOURCE INTEGRATION SLOT */ },
+                            .clickable { onPlay() },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
