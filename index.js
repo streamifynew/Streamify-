@@ -14,32 +14,37 @@ app.get('/api/health', (req, res) => {
 // Helper function to search links across providers
 async function searchAllProviders(query) {
     let results = [];
-
-    // 1. Vegamovies Search Scraper
     try {
-        const vegaUrl = `https://vegamovies.io/?s=${encodeURIComponent(query)}`;
+        const vegaUrl = `https://vegamovies.nl/?s=${encodeURIComponent(query)}`; // apna active URL yahan rakhein
+        console.log("Fetching URL:", vegaUrl);
+        
         const { data } = await axios.get(vegaUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
         });
-        const $= cheerio.load(data);$('div.title, .te-item, .post-item').each((_, element) => {
+        
+        const $ = cheerio.load(data);
+        console.log("Page loaded successfully, items found:", $('div.title, .post-item').length);
+
+        $('div.title, .post-item').each((_, element) => {
             const title = $(element).text().trim();
             const link = $(element).find('a').attr('href');
             if (link) {
                 results.push({
-                    source: 'Vegamovies',
+                    source: "Vegamovies",
                     title: title || query,
                     url: link,
-                    quality: title.toLowerCase().includes('1080p') ? '1080p' : (title.toLowerCase().includes('4k') ? '4K' : '720p'),
+                    quality: title.toLowerCase().includes('1080p') ? '1080p' : (title.toLowerCase().includes('4k') ? '4K' : 'HD'),
                     size: 'Unknown'
                 });
             }
         });
     } catch (err) {
-        console.log("Vegamovies error:", err.message);
+        // Yeh line batayegi ki asli error kya aa raha hai (jaise 403 Forbidden ya Cloudflare block)
+        console.log("Scraping Error Details:", err.message);
     }
-
     return results;
 }
+
 
 // API Endpoint jise app hit karegi
 app.get('/api/sources', async (req, res) => {
