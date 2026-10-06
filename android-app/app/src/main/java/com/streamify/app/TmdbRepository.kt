@@ -189,19 +189,19 @@ class TmdbRepository {
     // STREAMIFY SCRAPER BACKEND (RENDER INTEGRATION)
     // ============================================================
 
-    suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
+        suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
         val mediaTitle = item.title ?: item.name
         if (mediaTitle.isNullOrEmpty()) return emptyList()
 
         return try {
-            // NOTE: 'tera-render-app-name' ki jagah apne Render app ka actual naam dal dena
-            val renderBaseUrl = https://streamify-fdd9.onrender.com/api/sources"
+            val renderBaseUrl = "https://streamify-fdd9.onrender.com/api/sources"
             val response = api.getStreamingSources(renderBaseUrl, mediaTitle)
             response.resources
         } catch (e: Exception) {
             emptyList()
         }
     }
+
 
     // ============================================================
     // HELPERS
