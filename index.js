@@ -17,7 +17,7 @@ async function searchAllProviders(query) {
 
     // 1. Vegamovies Search Scraper
     try {
-        const vegaUrl = `https://vegamovies.pet/?s=${encodeURIComponent(query)}`;
+        const vegaUrl = `https://vegamovies.io/?s=${encodeURIComponent(query)}`;
         const { data } = await axios.get(vegaUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
         });
