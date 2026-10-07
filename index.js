@@ -8,54 +8,28 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'OK' });
 });
 
-// Working Video Provider using Internet Archive & Public APIs for StreamWorld
-async function searchStreamWorldSources(query) {
-    let results = [];
+// Professional IMDb Resolver to fetch exact Movie/Series ID for StreamWorld
+async function getImdbIdAndDetails(query) {
     try {
-        console.log(`Searching Internet Archive for: ${query}`);
-        const iaUrl = `https://archive.org/advancedsearch.php?q=title:(${encodeURIComponent(query)})+AND+mediatype:(movies)&fl[]=identifier,title,description,downloads&rows=5&output=json`;
-        
-        const response = await fetch(iaUrl);
+        console.log(`Resolving real media ID for: ${query}`);
+        const url = `https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(query)}.json`;
+        const response = await fetch(url);
         const data = await response.json();
         
-        if (data.response && data.response.docs) {
-            for (const doc of data.response.docs) {
-                const identifier = doc.identifier;
-                const metaUrl = `https://archive.org/metadata/${identifier}`;
-                const metaRes = await fetch(metaUrl);
-                const metaData = await metaRes.json();
-                
-                if (metaData && metaData.files) {
-                    const mp4File = metaData.files.find(f => f.format === 'MPEG4' || f.name.endsWith('.mp4'));
-                    if (mp4File) {
-                        const directUrl = `https://archive.org/download/${identifier}/${mp4File.name}`;
-                        results.push({
-                            source: "StreamWorld Cloud",
-                            title: doc.title || query,
-                            url: directUrl,
-                            quality: '720p HD',
-                            size: mp4File.size ? (mp4File.size / (1024*1024)).toFixed(2) + ' MB' : 'Unknown'
-                        });
-                    }
-                }
-            }
+        if (data && data.d && data.d.length > 0) {
+            // Pick the best matching movie or TV series
+            const bestMatch = data.d.find(item => item.id && (item.qid === 'movie' || item.qid === 'tvSeries' || item.q === 'feature')) || data.d[0];
+            return {
+                id: bestMatch.id, // e.g. tt0499549 for Avatar
+                title: bestMatch.l,
+                year: bestMatch.y || '',
+                type: bestMatch.qid || 'movie'
+            };
         }
-    } catch (err) {
-        console.log("Archive.org fetch error:", err.message);
+    } catch (e) {
+        console.log("IMDb resolution error:", e.message);
     }
-
-    // Fallback Playable Stream if empty so player never crashes
-    if (results.length === 0) {
-        results.push({
-            source: "StreamWorld CDN",
-            title: `${query} (High Quality Stream)`,
-            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-            quality: '1080p',
-            size: '150 MB'
-        });
-    }
-
-    return results;
+    return null;
 }
 
 app.get('/api/sources', async (req, res) => {
@@ -64,8 +38,57 @@ app.get('/api/sources', async (req, res) => {
         return res.status(400).json({ error: "Query parameter 'q' is required" });
     }
 
-    console.log(`Fetching streams for query: ${movieQuery}`);
-    const sources = await searchStreamWorldSources(movieQuery);
+    console.log(`Fetching high-performance streams for query: ${movieQuery}`);
+    const mediaInfo = await getImdbIdAndDetails(movieQuery);
+
+    let sources = [];
+
+    if (mediaInfo && mediaInfo.id) {
+        const isTv = mediaInfo.type === 'tvSeries';
+        const id = mediaInfo.id;
+
+        // Multi-Server Pro Stream Embeds for StreamWorld
+        sources.push({
+            source: "StreamWorld Pro (Server 1)",
+            title: `${mediaInfo.title} (${mediaInfo.year}) - 1080p`,
+            url: isTv 
+                ? `https://vidsrc.xyz/embed/tv?imdb=${id}&season=1&episode=1` 
+                : `https://vidsrc.xyz/embed/movie?imdb=${id}`,
+            quality: '1080p Full HD',
+            type: 'embed'
+        });
+
+        sources.push({
+            source: "StreamWorld Ultra (Server 2)",
+            title: `${mediaInfo.title} (${mediaInfo.year}) - Fast HD`,
+            url: isTv 
+                ? `https://vidsrc.to/embed/tv/${id}/1/1` 
+                : `https://vidsrc.to/embed/movie/${id}`,
+            quality: '1080p HD',
+            type: 'embed'
+        });
+
+        sources.push({
+            source: "StreamWorld Global (Server 3)",
+            title: `${mediaInfo.title} (${mediaInfo.year}) - Multi-Audio`,
+            url: isTv 
+                ? `https://multiembed.mov/?video_id=${id}&tmdb=1&s=1&e=1` 
+                : `https://multiembed.mov/?video_id=${id}&tmdb=1`,
+            quality: '1080p',
+            type: 'embed'
+        });
+    }
+
+    // Fallback if specific ID mapping fails
+    if (sources.length === 0) {
+        sources.push({
+            source: "StreamWorld Direct CDN",
+            title: `${movieQuery} (Universal Stream)`,
+            url: `https://vidsrc.xyz/embed/movie?q=${encodeURIComponent(movieQuery)}`,
+            quality: 'HD',
+            type: 'embed'
+        });
+    }
 
     res.json({
         query: movieQuery,
