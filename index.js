@@ -15,7 +15,7 @@ app.get('/api/health', (req, res) => {
 async function searchAllProviders(query) {
     let results = [];
     try {
-        const vegaUrl = `https://vegamovies.io/?s=${encodeURIComponent(query)}`;
+        const vegaUrl = `https://vegamovies.is/?s=${encodeURIComponent(query)}`;
         console.log("Fetching URL with cloudscraper:", vegaUrl);
 
         const data = await new Promise((resolve, reject) => {
@@ -26,6 +26,43 @@ async function searchAllProviders(query) {
         });
 
         const $ = cheerio.load(data);
+        console.log("Page loaded successfully. Parsing links...");
+
+        // Site ke saare anchor tags ko check karo jo search results ya posts ke ho sakte hain
+        $('a').each((_, element) => {
+            const title = $(element).text().trim();
+            const link = $(element).attr('href');
+
+            // Filter out navigation, empty, or irrelevant links
+            if (link && title && title.length > 5) {
+                const lowerTitle = title.toLowerCase();
+                // Check karo ki link me post/movie ka structure ho aur query se milti julti ho
+                if (link.includes('vegamovies') || link.includes('.is/') || link.includes('.to/')) {
+                    if (lowerTitle.includes('download') || lowerTitle.includes('1080p') || lowerTitle.includes('720p') || lowerTitle.includes('4k') || lowerTitle.includes(query.toLowerCase().substring(0, 3))) {
+                        results.push({
+                            source: "Vegamovies",
+                            title: title,
+                            url: link,
+                            quality: lowerTitle.includes('1080p') ? '1080p' : (lowerTitle.includes('4k') ? '4K' : 'HD'),
+                            size: 'Unknown'
+                        });
+                    }
+                }
+            }
+        });
+
+        // Remove duplicates based on URL
+        results = Array.from(new Set(results.map(a => a.url)))
+            .map(url => results.find(a => a.url === url));
+
+        console.log("Total items found after parsing:", results.length);
+
+    } catch (err) {
+        console.log("Scraping Error Details:", err.message);
+    }
+    return results;
+}
+
         
         // Multiple common selectors for WordPress / movie blogs
         const items = $('article, .post-item, .trending-box, .movies-list div, h2.title a, .search-result-item');
