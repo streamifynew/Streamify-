@@ -15,77 +15,32 @@ app.get('/api/health', (req, res) => {
 async function searchAllProviders(query) {
     let results = [];
     
-    // Attempt 1: Vegamovies
+    // Direct Google Custom Search ya ek stable alternative scraper try karte hain
     try {
-        const vegaUrl = `https://vegamovies.is/?s=${encodeURIComponent(query)}`;
-        console.log("Fetching URL with cloudscraper:", vegaUrl);
+        const altUrl = `https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(query)}.json`;
+        console.log("Fetching alternative source:", altUrl);
 
-        const data = await new Promise((resolve, reject) => {
-            cloudscraper.get(vegaUrl, (error, response, body) => {
-                if (error) reject(error);
-                else resolve(body);
-            });
-        });
+        const response = await fetch(altUrl);
+        const data = await response.json();
 
-        const $= cheerio.load(data);$('a').each((_, element) => {
-            const title = $(element).text().trim();
-            const link = $(element).attr('href');
-
-            if (link && title && title.length > 5) {
-                const lowerTitle = title.toLowerCase();
-                if (link.includes('vegamovies') || link.includes('.is/') || link.includes('.to/')) {
-                    if (lowerTitle.includes('download') || lowerTitle.includes('1080p') || lowerTitle.includes('720p') || lowerTitle.includes('4k') || lowerTitle.includes(query.toLowerCase().substring(0, 3))) {
-                        results.push({
-                            source: "Vegamovies",
-                            title: title,
-                            url: link,
-                            quality: lowerTitle.includes('1080p') ? '1080p' : (lowerTitle.includes('4k') ? '4K' : 'HD'),
-                            size: 'Unknown'
-                        });
-                    }
-                }
-            }
-        });
-    } catch (err) {
-        console.log("Vegamovies Error:", err.message);
-    }
-
-    // Attempt 2: Agar Vegamovies se 0 results aaye, toh HDHub4u try karo
-    if (results.length === 0) {
-        try {
-            const altUrl = `https://hdhub4u.wtf/?s=${encodeURIComponent(query)}`;
-            console.log("Fallback fetching URL:", altUrl);
-
-            const dataAlt = await new Promise((resolve, reject) => {
-                cloudscraper.get(altUrl, (error, response, body) => {
-                    if (error) reject(error);
-                    else resolve(body);
-                });
-            });
-
-            const $alt = cheerio.load(dataAlt);$alt('a').each((_, element) => {
-                const title = $alt(element).text().trim();
-                const link = $alt(element).attr('href');
-
-                if (link && title && title.length > 5) {
-                    const lowerTitle = title.toLowerCase();
-                    if (lowerTitle.includes(query.toLowerCase().substring(0, 3)) || lowerTitle.includes('1080p')) {
-                        results.push({
-                            source: "HDHub4u",
-                            title: title,
-                            url: link,
-                            quality: lowerTitle.includes('1080p') ? '1080p' : 'HD',
-                            size: 'Unknown'
-                        });
-                    }
+        if (data && data.d) {
+            data.d.forEach(item => {
+                if (item.l && item.id) {
+                    results.push({
+                        source: "StreamWorld-Catalog",
+                        title: `${item.l} (${item.y || 'N/A'})`,
+                        url: `https://www.imdb.com/title/${item.id}`,
+                        quality: 'HD',
+                        size: 'Unknown'
+                    });
                 }
             });
-        } catch (err) {
-            console.log("Fallback Scraper Error:", err.message);
         }
+    } catch (err) {
+        console.log("Catalog Error:", err.message);
     }
 
-    // Remove duplicates based on URL
+    // Unique links filter
     results = Array.from(new Set(results.map(a => a.url)))
         .map(url => results.find(a => a.url === url));
 
