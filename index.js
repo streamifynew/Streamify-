@@ -14,6 +14,8 @@ app.get('/api/health', (req, res) => {
 // Helper Function to search links across providers
 async function searchAllProviders(query) {
     let results = [];
+    
+    // Attempt 1: Vegamovies
     try {
         const vegaUrl = `https://vegamovies.is/?s=${encodeURIComponent(query)}`;
         console.log("Fetching URL with cloudscraper:", vegaUrl);
@@ -25,10 +27,7 @@ async function searchAllProviders(query) {
             });
         });
 
-        const $ = cheerio.load(data);
-        console.log("Page loaded successfully. Parsing links...");
-
-        $('a').each((_, element) => {
+        const $= cheerio.load(data);$('a').each((_, element) => {
             const title = $(element).text().trim();
             const link = $(element).attr('href');
 
@@ -47,16 +46,50 @@ async function searchAllProviders(query) {
                 }
             }
         });
-
-        // Remove duplicates based on URL
-        results = Array.from(new Set(results.map(a => a.url)))
-            .map(url => results.find(a => a.url === url));
-
-        console.log("Total items found after parsing:", results.length);
-
     } catch (err) {
-        console.log("Scraping Error Details:", err.message);
+        console.log("Vegamovies Error:", err.message);
     }
+
+    // Attempt 2: Agar Vegamovies se 0 results aaye, toh HDHub4u try karo
+    if (results.length === 0) {
+        try {
+            const altUrl = `https://hdhub4u.wtf/?s=${encodeURIComponent(query)}`;
+            console.log("Fallback fetching URL:", altUrl);
+
+            const dataAlt = await new Promise((resolve, reject) => {
+                cloudscraper.get(altUrl, (error, response, body) => {
+                    if (error) reject(error);
+                    else resolve(body);
+                });
+            });
+
+            const $alt = cheerio.load(dataAlt);$alt('a').each((_, element) => {
+                const title = $alt(element).text().trim();
+                const link = $alt(element).attr('href');
+
+                if (link && title && title.length > 5) {
+                    const lowerTitle = title.toLowerCase();
+                    if (lowerTitle.includes(query.toLowerCase().substring(0, 3)) || lowerTitle.includes('1080p')) {
+                        results.push({
+                            source: "HDHub4u",
+                            title: title,
+                            url: link,
+                            quality: lowerTitle.includes('1080p') ? '1080p' : 'HD',
+                            size: 'Unknown'
+                        });
+                    }
+                }
+            });
+        } catch (err) {
+            console.log("Fallback Scraper Error:", err.message);
+        }
+    }
+
+    // Remove duplicates based on URL
+    results = Array.from(new Set(results.map(a => a.url)))
+        .map(url => results.find(a => a.url === url));
+
+    console.log("Total items found after parsing (All providers):", results.length);
     return results;
 }
 
@@ -79,5 +112,5 @@ app.get('/api/sources', async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`Streamify Scraper Backend running on port ${PORT}`);
+    console.log(`StreamWorld Scraper Backend running on port ${PORT}`);
 });
