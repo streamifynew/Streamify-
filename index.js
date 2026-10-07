@@ -1,5 +1,4 @@
 import express from 'express';
-import fetch from 'node-fetch';
 import 'dotenv/config';
 
 const app = express();
@@ -22,7 +21,6 @@ async function searchStreamWorldSources(query) {
         if (data.response && data.response.docs) {
             for (const doc of data.response.docs) {
                 const identifier = doc.identifier;
-                // Fetch metadata to find playable files
                 const metaUrl = `https://archive.org/metadata/${identifier}`;
                 const metaRes = await fetch(metaUrl);
                 const metaData = await metaRes.json();
@@ -46,7 +44,7 @@ async function searchStreamWorldSources(query) {
         console.log("Archive.org fetch error:", err.message);
     }
 
-    // Fallback Mock Playable Stream if empty so player never crashes
+    // Fallback Playable Stream if empty so player never crashes
     if (results.length === 0) {
         results.push({
             source: "StreamWorld CDN",
