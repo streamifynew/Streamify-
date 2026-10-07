@@ -15,7 +15,7 @@ app.get('/api/health', (req, res) => {
 async function searchAllProviders(query) {
     let results = [];
     try {
-        const vegaUrl = `https://vegamovies.nl/?s=${encodeURIComponent(query)}`;
+        const vegaUrl = `https://vegamovies.io/?s=${encodeURIComponent(query)}`;
         console.log("Fetching URL with cloudscraper:", vegaUrl);
 
         const data = await new Promise((resolve, reject) => {
