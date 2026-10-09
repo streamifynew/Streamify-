@@ -189,19 +189,20 @@ class TmdbRepository {
     // STREAMIFY SCRAPER BACKEND (RENDER INTEGRATION)
     // ============================================================
 
-        suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
-        val mediaTitle = item.title ?: item.name
-        if (mediaTitle.isNullOrEmpty()) return emptyList()
+    suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
+        val mediaId = item.id
+        val mediaType = item.media_type ?: "movie"
+        if (mediaId == 0) return emptyList()
 
         return try {
-            val renderBaseUrl = "https://streamify-fdd9.onrender.com/api/sources"
-            val response = api.getStreamingSources(renderBaseUrl, mediaTitle)
+            // Live Render Backend URL
+            val renderBaseUrl = "https://core-9b8h.onrender.com"
+            val response = api.getStreamingSources(renderBaseUrl, mediaType, mediaId)
             response.resources
         } catch (e: Exception) {
             emptyList()
         }
     }
-
 
     // ============================================================
     // HELPERS
