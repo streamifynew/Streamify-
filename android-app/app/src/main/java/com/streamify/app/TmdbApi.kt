@@ -82,12 +82,16 @@ interface TmdbApi {
     ): TmdbResponse
 
     // ============================================================
-    // STREAMIFY SCRAPER BACKEND
+    // STREAMIFY SCRAPER BACKEND (OMSS / CINEPRO CORE)
     // ============================================================
     @GET
-    suspend fun getStreamingSources(
-        @Url fullUrl: String,
-        @Query("q") query: String
+    suspend fun getMovieSources(
+        @Url fullUrl: String
+    ): ScraperResponse
+
+    @GET
+    suspend fun getTvSources(
+        @Url fullUrl: String
     ): ScraperResponse
 }
 
@@ -136,4 +140,4 @@ data class StreamingSource(
     val url: String,
     val quality: String,
     val size: String
-)  
+)
