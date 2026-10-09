@@ -185,22 +185,25 @@ class TmdbRepository {
         }
     }
 
-        // ============================================================
+            // ============================================================
     // STREAMIFY SCRAPER BACKEND (RENDER INTEGRATION)
     // ============================================================
 
     suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
-        val mediaTitle = item.title ?: item.name
-        if (mediaTitle.isNullOrEmpty()) return emptyList()
+        val mediaId = item.id
+        if (mediaId == 0) return emptyList()
 
         return try {
             val renderBaseUrl = "https://core-9b8h.onrender.com"
-            val response = api.getStreamingSources(renderBaseUrl, mediaTitle)
+            // Agar TV show hai toh ID bhejenge, movie hai toh bhi ID bhejenge
+            // Retrofit client par depend karta hai ki wo ID as an Int leta hai ya String
+            val response = api.getStreamingSources(renderBaseUrl, mediaId.toString())
             response.resources
         } catch (e: Exception) {
             emptyList()
         }
     }
+
 
 
 
