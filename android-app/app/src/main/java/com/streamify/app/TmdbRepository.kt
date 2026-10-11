@@ -185,8 +185,8 @@ class TmdbRepository {
         }
     }
 
-    // ============================================================
-    // STREAMIFY SCRAPER BACKEND + STABLE FALLBACK
+        // ============================================================
+    // STREAMIFY SCRAPER BACKEND + BULLETPROOF FALLBACK
     // ============================================================
 
     suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
@@ -195,8 +195,8 @@ class TmdbRepository {
 
         val renderBaseUrl = "https://core-9b8h.onrender.com"
 
-        // 1. Pehle Render backend se try karenge
-        try {
+        // 1. Pehle backend se try karo
+        val backendSources = try {
             val response = if (item.media_type == "tv") {
                 val fullUrl = "$renderBaseUrl/v1/tv/$mediaId/seasons/1/episodes/1"
                 api.getTvSources(fullUrl)
@@ -204,19 +204,22 @@ class TmdbRepository {
                 val fullUrl = "$renderBaseUrl/v1/movies/$mediaId"
                 api.getMovieSources(fullUrl)
             }
-            if (response.resources.isNotEmpty()) {
-                return response.resources
-            }
+            response.resources
         } catch (_: Exception) {
-            // Agar backend fail ho toh stable fallback chalega
+            emptyList()
         }
 
-        // 2. STABLE FALLBACK (Cloudflare 522 error free links)
+        // 2. Agar backend se links mil gaye toh wahi use karo
+        if (backendSources.isNotEmpty()) {
+            return backendSources
+        }
+
+        // 3. FALLBACK: Agar backend fail hua ya 0 sources mile, toh direct stable embed links do
         return if (item.media_type == "tv") {
             listOf(
                 StreamingSource(
                     source = "VidSrc",
-                    title = "Server HD (Stable)",
+                    title = "Server HD (Direct)",
                     url = "https://vidsrc.xyz/embed/tv?tmdb=$mediaId&season=1&episode=1",
                     quality = "1080p",
                     size = "HD"
@@ -233,7 +236,7 @@ class TmdbRepository {
             listOf(
                 StreamingSource(
                     source = "VidSrc",
-                    title = "Server HD (Stable)",
+                    title = "Server HD (Direct)",
                     url = "https://vidsrc.xyz/embed/movie?tmdb=$mediaId",
                     quality = "1080p",
                     size = "HD"
@@ -248,6 +251,7 @@ class TmdbRepository {
             )
         }
     }
+
 
 
 
