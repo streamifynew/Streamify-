@@ -186,7 +186,7 @@ class TmdbRepository {
     }
 
     // ============================================================
-    // STREAMIFY SCRAPER BACKEND + SMART FALLBACK
+    // STREAMIFY SCRAPER BACKEND + STABLE FALLBACK
     // ============================================================
 
     suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
@@ -208,24 +208,23 @@ class TmdbRepository {
                 return response.resources
             }
         } catch (_: Exception) {
-            // Agar backend fail hua ya block hua toh fallback chalega
+            // Agar backend fail ho toh stable fallback chalega
         }
 
-        // 2. SMART FALLBACK: Agar backend se sources na milein, 
-        // toh direct reliable streaming embeds return kar do taaki player movie chala sake!
+        // 2. STABLE FALLBACK (Cloudflare 522 error free links)
         return if (item.media_type == "tv") {
             listOf(
                 StreamingSource(
                     source = "VidSrc",
-                    title = "Server HD (Direct)",
-                    url = "https://vidsrc.cc/v2/embed/tv/$mediaId/1/1",
+                    title = "Server HD (Stable)",
+                    url = "https://vidsrc.xyz/embed/tv?tmdb=$mediaId&season=1&episode=1",
                     quality = "1080p",
                     size = "HD"
                 ),
                 StreamingSource(
-                    source = "MultiEmbed",
+                    source = "EmbedSu",
                     title = "Server Fast",
-                    url = "https://multiembed.mov/?video_id=$mediaId&tmdb=1",
+                    url = "https://embed.su/embed/tv/$mediaId/1/1",
                     quality = "1080p",
                     size = "HD"
                 )
@@ -234,21 +233,22 @@ class TmdbRepository {
             listOf(
                 StreamingSource(
                     source = "VidSrc",
-                    title = "Server HD (Direct)",
-                    url = "https://vidsrc.cc/v2/embed/movie/$mediaId",
+                    title = "Server HD (Stable)",
+                    url = "https://vidsrc.xyz/embed/movie?tmdb=$mediaId",
                     quality = "1080p",
                     size = "HD"
                 ),
                 StreamingSource(
-                    source = "MultiEmbed",
+                    source = "EmbedSu",
                     title = "Server Fast",
-                    url = "https://multiembed.mov/?video_id=$mediaId",
+                    url = "https://embed.su/embed/movie/$mediaId",
                     quality = "1080p",
                     size = "HD"
                 )
             )
         }
     }
+
 
 
     // ============================================================
