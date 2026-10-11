@@ -186,35 +186,16 @@ class TmdbRepository {
     }
 
         // ============================================================
-    // STREAMIFY SCRAPER BACKEND + BULLETPROOF FALLBACK
+    // ============================================================
+    // DIRECT STREAMING SOURCES (NO RENDER/BACKEND DEPENDENCY)
     // ============================================================
 
     suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
         val mediaId = item.id
         if (mediaId == 0) return emptyList()
 
-        val renderBaseUrl = "https://core-9b8h.onrender.com"
-
-        // 1. Pehle backend se try karo
-        val backendSources = try {
-            val response = if (item.media_type == "tv") {
-                val fullUrl = "$renderBaseUrl/v1/tv/$mediaId/seasons/1/episodes/1"
-                api.getTvSources(fullUrl)
-            } else {
-                val fullUrl = "$renderBaseUrl/v1/movies/$mediaId"
-                api.getMovieSources(fullUrl)
-            }
-            response.resources
-        } catch (_: Exception) {
-            emptyList()
-        }
-
-        // 2. Agar backend se links mil gaye toh wahi use karo
-        if (backendSources.isNotEmpty()) {
-            return backendSources
-        }
-
-        // 3. FALLBACK: Agar backend fail hua ya 0 sources mile, toh direct stable embed links do
+        // Render backend ko bypass karke direct working stream links return karo
+        // Taaki IP blocking ya 404 error ka koi chakkar hi na rahe!
         return if (item.media_type == "tv") {
             listOf(
                 StreamingSource(
@@ -251,6 +232,7 @@ class TmdbRepository {
             )
         }
     }
+
 
 
 
