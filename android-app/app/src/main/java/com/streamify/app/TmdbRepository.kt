@@ -186,7 +186,7 @@ class TmdbRepository {
     }
 
     // ============================================================
-    // STREAMIFY SCRAPER BACKEND (RENDER INTEGRATION)
+    // STREAMIFY SCRAPER BACKEND + SMART FALLBACK
     // ============================================================
 
     suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
@@ -195,7 +195,8 @@ class TmdbRepository {
 
         val renderBaseUrl = "https://core-9b8h.onrender.com"
 
-        return try {
+        // 1. Pehle Render backend se try karenge
+        try {
             val response = if (item.media_type == "tv") {
                 val fullUrl = "$renderBaseUrl/v1/tv/$mediaId/seasons/1/episodes/1"
                 api.getTvSources(fullUrl)
@@ -203,11 +204,52 @@ class TmdbRepository {
                 val fullUrl = "$renderBaseUrl/v1/movies/$mediaId"
                 api.getMovieSources(fullUrl)
             }
-            response.resources
-        } catch (e: Exception) {
-            emptyList()
+            if (response.resources.isNotEmpty()) {
+                return response.resources
+            }
+        } catch (_: Exception) {
+            // Agar backend fail hua ya block hua toh fallback chalega
+        }
+
+        // 2. SMART FALLBACK: Agar backend se sources na milein, 
+        // toh direct reliable streaming embeds return kar do taaki player movie chala sake!
+        return if (item.media_type == "tv") {
+            listOf(
+                StreamingSource(
+                    source = "VidSrc",
+                    title = "Server HD (Direct)",
+                    url = "https://vidsrc.cc/v2/embed/tv/$mediaId/1/1",
+                    quality = "1080p",
+                    size = "HD"
+                ),
+                StreamingSource(
+                    source = "MultiEmbed",
+                    title = "Server Fast",
+                    url = "https://multiembed.mov/?video_id=$mediaId&tmdb=1",
+                    quality = "1080p",
+                    size = "HD"
+                )
+            )
+        } else {
+            listOf(
+                StreamingSource(
+                    source = "VidSrc",
+                    title = "Server HD (Direct)",
+                    url = "https://vidsrc.cc/v2/embed/movie/$mediaId",
+                    quality = "1080p",
+                    size = "HD"
+                ),
+                StreamingSource(
+                    source = "MultiEmbed",
+                    title = "Server Fast",
+                    url = "https://multiembed.mov/?video_id=$mediaId",
+                    quality = "1080p",
+                    size = "HD"
+                )
+            )
         }
     }
+
 
     // ============================================================
     // HELPERS
