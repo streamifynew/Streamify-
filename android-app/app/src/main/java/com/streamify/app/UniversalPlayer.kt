@@ -20,16 +20,14 @@ import androidx.media3.ui.PlayerView
 fun UniversalPlayerScreen(streamUrl: String, streamType: String) {
     val context = LocalContext.current
     
-    // Check if the link is a web embed or direct video stream (.mp4 / .m3u8)
     val isEmbed = streamType == "embed" || 
                   streamUrl.contains("vidsrc") || 
                   streamUrl.contains("multiembed") || 
                   streamUrl.contains("embed") ||
-                  !streamUrl.endsWith(".mp4") && !streamUrl.endsWith(".m3u8")
+                  (!streamUrl.endsWith(".mp4") && !streamUrl.endsWith(".m3u8"))
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         if (isEmbed) {
-            // WebView for HTML / Embed / Vidsrc / EmbedSu links
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -44,4 +42,36 @@ fun UniversalPlayerScreen(streamUrl: String, streamType: String) {
                     }
                 },
                 update = { webView ->
-                    webView.load
+                    webView.loadUrl(streamUrl)
+                }
+            )
+        } else {
+            val exoPlayer = remember(streamUrl) {
+                ExoPlayer.Builder(context).build().apply {
+                    setMediaItem(MediaItem.fromUri(Uri.parse(streamUrl)))
+                    prepare()
+                    playWhenReady = true
+                }
+            }
+
+            DisposableEffect(streamUrl) {
+                onDispose {
+                    exoPlayer.release()
+                }
+            }
+
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                }
+            )
+        }
+    }
+}
