@@ -185,30 +185,36 @@ class TmdbRepository {
         }
     }
 
-        // ============================================================
-    // ============================================================
-    // DIRECT STREAMING SOURCES (NO RENDER/BACKEND DEPENDENCY)
+            // ============================================================
+    // DIRECT CLIENT-SIDE STREAMING GENERATOR (NO CLOUD BACKEND)
     // ============================================================
 
     suspend fun fetchStreamingLinksForAnyMedia(item: TmdbItem): List<StreamingSource> {
         val mediaId = item.id
         if (mediaId == 0) return emptyList()
 
-        // Render backend ko bypass karke direct working stream links return karo
-        // Taaki IP blocking ya 404 error ka koi chakkar hi na rahe!
+        // Render backend ki zarurat hi nahi hai! 
+        // App seedha phone ki IP se direct, fast aur reliable embed servers ke links banata hai.
         return if (item.media_type == "tv") {
             listOf(
                 StreamingSource(
                     source = "VidSrc",
-                    title = "Server HD (Direct)",
+                    title = "Server 1 (HD)",
                     url = "https://vidsrc.xyz/embed/tv?tmdb=$mediaId&season=1&episode=1",
                     quality = "1080p",
                     size = "HD"
                 ),
                 StreamingSource(
                     source = "EmbedSu",
-                    title = "Server Fast",
+                    title = "Server 2 (Fast)",
                     url = "https://embed.su/embed/tv/$mediaId/1/1",
+                    quality = "1080p",
+                    size = "HD"
+                ),
+                StreamingSource(
+                    source = "MultiEmbed",
+                    title = "Server 3 (Multi)",
+                    url = "https://multiembed.mov/?video_id=$mediaId&tmdb=1&s=1&e=1",
                     quality = "1080p",
                     size = "HD"
                 )
@@ -217,21 +223,29 @@ class TmdbRepository {
             listOf(
                 StreamingSource(
                     source = "VidSrc",
-                    title = "Server HD (Direct)",
+                    title = "Server 1 (HD)",
                     url = "https://vidsrc.xyz/embed/movie?tmdb=$mediaId",
                     quality = "1080p",
                     size = "HD"
                 ),
                 StreamingSource(
                     source = "EmbedSu",
-                    title = "Server Fast",
+                    title = "Server 2 (Fast)",
                     url = "https://embed.su/embed/movie/$mediaId",
+                    quality = "1080p",
+                    size = "HD"
+                ),
+                StreamingSource(
+                    source = "MultiEmbed",
+                    title = "Server 3 (Multi)",
+                    url = "https://multiembed.mov/?video_id=$mediaId",
                     quality = "1080p",
                     size = "HD"
                 )
             )
         }
     }
+
 
 
 
