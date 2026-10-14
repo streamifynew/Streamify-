@@ -1,6 +1,7 @@
 package com.streamify.app
 
 import android.net.Uri
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -35,6 +36,9 @@ fun UniversalPlayerScreen(streamUrl: String, streamType: String) {
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     WebView(ctx).apply {
+                        // Enable Hardware Acceleration so video frames render properly
+                        setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                        
                         settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
@@ -45,14 +49,23 @@ fun UniversalPlayerScreen(streamUrl: String, streamType: String) {
                             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                             allowFileAccess = true
                             allowContentAccess = true
+                            
+                            // CRITICAL: Fakes a real mobile Chrome browser user-agent so vidsrc/embed.su don't block it
+                            userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                         }
                         
-                        // Crucial for vidsrc and embed.su to load their video players
                         CookieManager.getInstance().setAcceptCookie(true)
                         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                         
                         webChromeClient = WebChromeClient()
-                        webViewClient = WebViewClient()
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                                if (url != null) {
+                                    view?.loadUrl(url)
+                                }
+                                return true
+                            }
+                        }
                         loadUrl(streamUrl)
                     }
                 },
