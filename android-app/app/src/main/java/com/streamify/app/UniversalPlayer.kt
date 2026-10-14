@@ -2,6 +2,9 @@ package com.streamify.app
 
 import android.net.Uri
 import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
@@ -32,11 +35,23 @@ fun UniversalPlayerScreen(streamUrl: String, streamType: String) {
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.loadWithOverviewMode = true
-                        settings.useWideViewPort = true
-                        settings.mediaPlaybackRequiresUserGesture = false
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            databaseEnabled = true
+                            loadWithOverviewMode = true
+                            useWideViewPort = true
+                            mediaPlaybackRequiresUserGesture = false
+                            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            allowFileAccess = true
+                            allowContentAccess = true
+                        }
+                        
+                        // Crucial for vidsrc and embed.su to load their video players
+                        CookieManager.getInstance().setAcceptCookie(true)
+                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        
+                        webChromeClient = WebChromeClient()
                         webViewClient = WebViewClient()
                         loadUrl(streamUrl)
                     }
